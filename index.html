@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MSH Draft Simulator — Rate the Pack</title>
+<!-- iOS "Add to Home Screen" -> opens full-screen like an app -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MSH Trainer">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0d14">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23e62429'/%3E%3Ctext x='90' y='128' font-size='110' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EM%3C/text%3E%3C/svg%3E">
+
 <style>
   :root{
     --bg:#0b0d14; --panel:#151926; --panel2:#1d2333; --ink:#e8ebf4; --muted:#8b93ab;
@@ -258,7 +265,7 @@ function renderPack(){
       : `<div class="ph">${c.name}</div>`;
     const ctrl = scorable(c)
       ? `<div class="inp"><label>your rating</label>
-           <input type="number" min="1" max="5" step="0.1" inputmode="decimal"
+           <input type="text" inputmode="decimal" pattern="[0-9.,]*"
                   data-i="${i}" placeholder="1–5"></div>`
       : `<div class="skipnote">no win-rate data — skipped</div>`;
     return `<div class="card" id="card-${i}">
@@ -284,7 +291,7 @@ function reveal(){
     const cardEl=$("card-"+i);
     if(!scorable(c)){ skipped++; return; }
     const inp=cardEl.querySelector("input");
-    const raw=inp.value.trim();
+    const raw=inp.value.trim().replace(",",".");
     const body=cardEl.querySelector(".body");
     cardEl.querySelector(".inp").remove();
     if(raw===""){ // didn't guess
@@ -403,6 +410,12 @@ function init(){
     const inputs=[...$("grid").querySelectorAll("input")];
     const idx=inputs.indexOf(e.target);
     if(idx>=0&&idx<inputs.length-1)inputs[idx+1].focus(); else reveal();
+  });
+  // normalise input live: comma -> dot, strip anything that isn't a number
+  $("grid").addEventListener("input",e=>{
+    if(e.target.tagName!=="INPUT")return;
+    const cleaned=e.target.value.replace(/,/g,".").replace(/[^0-9.]/g,"");
+    if(cleaned!==e.target.value)e.target.value=cleaned;
   });
   // nav + study controls
   $("nav-play").onclick=()=>showView("play");
