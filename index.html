@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MSH Draft Simulator — Rate the Pack</title>
+<style>
+  :root{
+    --bg:#0b0d14; --panel:#151926; --panel2:#1d2333; --ink:#e8ebf4; --muted:#8b93ab;
+    --line:#2a3146; --accent:#e62429; --accent2:#f0a000; --good:#2fd07a; --bad:#ff5a5f;
+    --c1:#ff5a5f; --c2:#ff9d4d; --c3:#ffd24d; --c4:#9be36b; --c5:#46e0a8;
+    --common:#cdd3e0; --uncommon:#9fd0e8; --rare:#e6c878; --mythic:#f0792a;
+    --special:#c061f0; --basic:#8b93ab;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1f30,#0b0d14 60%);
+       color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       min-height:100vh}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px 16px 120px}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+  h1{font-size:20px;margin:0;letter-spacing:.3px}
+  h1 .mk{color:var(--accent)}
+  .sub{color:var(--muted);font-size:12.5px;margin:0 0 18px}
+  .stats{margin-left:auto;display:flex;gap:18px;font-size:12.5px;color:var(--muted)}
+  .stats b{display:block;color:var(--ink);font-size:17px;font-weight:700}
+  .nav{display:flex;gap:6px}
+  .navbtn{background:var(--panel2);color:var(--muted);border:1px solid var(--line);
+          padding:7px 14px;font-size:13px;font-weight:700;border-radius:10px}
+  .navbtn.active{color:var(--ink);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+  button{font:inherit;cursor:pointer;border:none;border-radius:10px}
+  .btn{background:var(--accent);color:#fff;padding:11px 22px;font-weight:700;letter-spacing:.3px;
+       box-shadow:0 4px 16px rgba(230,36,41,.35)}
+  .btn:hover{filter:brightness(1.08)}
+  .btn.ghost{background:var(--panel2);color:var(--ink);box-shadow:none;border:1px solid var(--line)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px}
+  .center{text-align:center}.hidden{display:none}
+
+  /* pack grid */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+        display:flex;flex-direction:column;transition:border-color .2s,box-shadow .2s}
+  .card .art{position:relative;aspect-ratio:5/7;background:#0e1119;display:flex;align-items:center;justify-content:center}
+  .card .art img{width:100%;height:100%;object-fit:cover;display:block}
+  .card .art .ph{color:var(--muted);text-align:center;padding:14px;font-size:12px}
+  .pill{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.74);padding:3px 9px;border-radius:20px;
+        font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .body{padding:9px 10px 11px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .nm{font-size:13px;font-weight:700;line-height:1.25}
+  .cmeta{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:6px}
+  .r-common{color:var(--common)} .r-uncommon{color:var(--uncommon)}
+  .r-rare{color:var(--rare)} .r-mythic{color:var(--mythic)}
+  .r-special{color:var(--special)} .r-basic{color:var(--basic)}
+
+  .inp{margin-top:auto}
+  .inp label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .inp input{width:100%;margin-top:3px;background:var(--panel2);border:1px solid var(--line);
+             color:var(--ink);border-radius:9px;padding:8px 10px;font-size:16px;font-weight:700;text-align:center}
+  .inp input:focus{outline:none;border-color:var(--accent2)}
+  .skipnote{font-size:10.5px;color:var(--accent2);font-weight:600;margin-top:auto;text-align:center;
+            padding:8px 0 2px;border-top:1px dashed var(--line)}
+
+  /* result overlay on each card */
+  .res{font-size:11.5px;border-top:1px dashed var(--line);padding-top:8px;margin-top:auto;line-height:1.5}
+  .res .row{display:flex;justify-content:space-between}
+  .res .truth{font-weight:800;color:var(--ink)}
+  .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:700;display:inline-block}
+  .tag.ok{background:rgba(47,208,122,.15);color:var(--good)}
+  .tag.mid{background:rgba(240,160,0,.15);color:var(--accent2)}
+  .tag.off{background:rgba(255,90,95,.15);color:var(--bad)}
+  .card.ok{border-color:rgba(47,208,122,.5)}
+  .card.mid{border-color:rgba(240,160,0,.45)}
+  .card.off{border-color:rgba(255,90,95,.5)}
+  .card.pick{border-color:var(--accent2);box-shadow:0 0 0 2px var(--accent2),0 0 24px rgba(240,160,0,.45)}
+  .pickbadge{position:absolute;top:8px;right:8px;background:var(--accent2);color:#1a1300;
+             font-size:10px;font-weight:800;letter-spacing:.5px;padding:4px 9px;border-radius:20px;
+             box-shadow:0 2px 8px rgba(0,0,0,.4)}
+
+  /* study list */
+  .studybar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+  #studysearch{flex:1;min-width:180px;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+               border-radius:10px;padding:10px 14px;font-size:14px}
+  #studysearch:focus{outline:none;border-color:var(--accent2)}
+  .filters{display:flex;gap:6px;flex-wrap:wrap}
+  .fbtn{background:var(--panel2);color:var(--muted);border:1px solid var(--line);
+        padding:7px 12px;font-size:12.5px;font-weight:700;border-radius:9px}
+  .fbtn.active{color:var(--ink);border-color:var(--accent2)}
+  .srow{display:grid;grid-template-columns:34px 104px 1fr auto;gap:14px;align-items:center;
+        padding:9px 10px;border-bottom:1px solid var(--line)}
+  .srow .rk{color:var(--muted);font-size:12px;text-align:right}
+  .srow .th{width:104px;height:auto;border-radius:7px;display:block;background:#0e1119}
+  .srow .snm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .srow .smeta{font-size:11px;color:var(--muted)}
+  .srow .ssc{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+  .scount{color:var(--muted);font-size:12.5px;margin:0 0 10px}
+
+  /* sticky action bar */
+  .bar{position:fixed;left:0;right:0;bottom:0;background:rgba(11,13,20,.92);backdrop-filter:blur(8px);
+       border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:14px;align-items:center;
+       justify-content:center;z-index:5}
+  .bar .info{color:var(--muted);font-size:12.5px;margin-right:auto}
+
+  /* summary */
+  .grade{font-size:54px;font-weight:900;line-height:1}
+  .summaryhead{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:6px}
+  footer{color:var(--muted);font-size:11.5px;margin-top:26px;text-align:center;line-height:1.7}
+  a{color:var(--muted)} code{background:var(--panel2);padding:1px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1><span class="mk">MARVEL</span> Super Heroes — Draft Rating Trainer</h1></div>
+    <nav class="nav">
+      <button class="navbtn active" id="nav-play">🎴 Play</button>
+      <button class="navbtn" id="nav-study">📋 Study list</button>
+    </nav>
+    <div class="stats">
+      <div>Packs<b id="st-packs">0</b></div>
+      <div>Cards rated<b id="st-cards">0</b></div>
+      <div>Avg error<b id="st-err">—</b></div>
+    </div>
+  </header>
+  <p class="sub" id="dataline">Loading card data…</p>
+
+ <div id="playview">
+  <!-- START -->
+  <div id="start" class="panel center hidden">
+    <h2>Open a booster and rate every card</h2>
+    <p class="sub" style="margin:8px auto 18px;max-width:600px">
+      A simulated MSH Play Booster is dealt face-up. Type a rating from <b>1.0</b> (worst)
+      to <b>5.0</b> (bomb) for each card — decimals welcome, e.g. <b>3.5</b> — then hit
+      <b>Reveal</b> to see the true ratings (from real In-Hand Win Rates) and how close you were.
+    </p>
+    <button class="btn" id="open1">Open Booster ⚡</button>
+  </div>
+
+  <!-- PACK -->
+  <div id="packwrap" class="hidden">
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div id="summary" class="panel hidden" style="margin-bottom:18px"></div>
+ </div><!-- /playview -->
+
+  <!-- STUDY LIST -->
+  <div id="studyview" class="hidden">
+    <div class="studybar">
+      <input type="search" id="studysearch" placeholder="Search a card…" autocomplete="off">
+      <div class="filters" id="studyfilters">
+        <button class="fbtn active" data-r="all">All</button>
+        <button class="fbtn" data-r="common">Common</button>
+        <button class="fbtn" data-r="uncommon">Uncommon</button>
+        <button class="fbtn" data-r="rare">Rare</button>
+        <button class="fbtn" data-r="mythic">Mythic</button>
+      </div>
+    </div>
+    <div id="studylist"></div>
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<!-- sticky bar -->
+<div id="bar" class="bar hidden">
+  <span class="info" id="barinfo"></span>
+  <button class="btn ghost" id="newpack">New pack</button>
+  <button class="btn" id="reveal">Reveal ratings ▸</button>
+</div>
+
+<script src="cards.js"></script>
+<script>
+"use strict";
+
+/* ============================================================
+   BOOSTER MODEL  (edit to change the simulation)
+   ------------------------------------------------------------
+   14-card MSH Play Booster:
+     • 1 Rare-or-Mythic slot   (mythic ~13.5% of the time)
+     • 3 Uncommons
+     • 9 Commons (non-land)
+     • 1 Land slot — ~50% a basic land, ~50% a common dual land.
+       (Basic lands have no win-rate data, so they're shown but
+        skipped when scoring your guesses.)
+     • A Marvel Universe special card replaces a common in ~8%
+       of packs (Arena's "special guest" slot).
+   ============================================================ */
+const BOOSTER = {
+  size: 14,
+  rareMythicSlots: 1, mythicChance: 0.135,
+  uncommons: 3,
+  commons: 9,
+  landSlots: 1, basicLandChance: 0.50,
+  marChance: 0.08,
+};
+
+const DB = window.__CARDS__;
+const POOL = { common:[], commonLand:[], uncommon:[], rare:[], mythic:[], mar:[], basic:[] };
+for (const c of DB.cards) {
+  if (c.is_basic)            POOL.basic.push(c);
+  else if (c.set === "MAR")  POOL.mar.push(c);
+  else if (c.rarity === "common") (c.is_land ? POOL.commonLand : POOL.common).push(c);
+  else if (POOL[c.rarity])   POOL[c.rarity].push(c);
+}
+
+const S = { packs:0, scored:0, errSum:0 };
+const $ = id => document.getElementById(id);
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const f1 = n => n.toFixed(1);
+function sample(arr,n,used){const out=[];let guard=0;while(out.length<n&&guard++<999){const c=pick(arr);if(c&&!used.has(c.id)){used.add(c.id);out.push(c);}if(used.size>=arr.length)break;}return out;}
+
+function buildPack(){
+  const used=new Set(); let cards=[];
+  for(let i=0;i<BOOSTER.rareMythicSlots;i++){
+    const mythic = Math.random()<BOOSTER.mythicChance && POOL.mythic.length;
+    const c = pick(mythic?POOL.mythic:POOL.rare);
+    if(c&&!used.has(c.id)){used.add(c.id);cards.push(c);}
+  }
+  cards = cards.concat(sample(POOL.uncommon, BOOSTER.uncommons, used));
+  cards = cards.concat(sample(POOL.common,   BOOSTER.commons,   used));
+  // land slot
+  for(let i=0;i<BOOSTER.landSlots;i++){
+    const useBasic = Math.random()<BOOSTER.basicLandChance && POOL.basic.length;
+    const pool = useBasic ? POOL.basic : (POOL.commonLand.length?POOL.commonLand:POOL.basic);
+    const c = pick(pool);
+    if(c){ if(!c.is_basic) used.add(c.id); cards.push(c); }
+  }
+  // Marvel Universe special: swap a common
+  if(POOL.mar.length && Math.random()<BOOSTER.marChance){
+    const idx = cards.findIndex(c=>c.rarity==="common" && !c.is_land);
+    if(idx>=0) cards[idx]=pick(POOL.mar);
+  }
+  for(let i=cards.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[cards[i],cards[j]]=[cards[j],cards[i]];}
+  return cards;
+}
+
+let pack=[];
+const show=el=>el.classList.remove("hidden"), hide=el=>el.classList.add("hidden");
+const rarityClass=c=>c.is_basic?"r-basic":c.set==="MAR"?"r-special":"r-"+c.rarity;
+const rarityLabel=c=>c.is_basic?"basic land":c.set==="MAR"?"Marvel Universe":c.rarity;
+const scorable=c=>c.score!=null;
+
+function startPack(){
+  pack=buildPack(); S.packs++;
+  hide($("start")); hide($("summary")); show($("packwrap")); show($("bar"));
+  renderPack(); updateStats();
+  $("reveal").disabled=false;
+  $("barinfo").textContent="Rate each card 1.0–5.0, then Reveal.";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function renderPack(){
+  $("grid").innerHTML = pack.map((c,i)=>{
+    const art = c.image
+      ? `<img src="${c.image}" alt="${c.name}" loading="lazy">`
+      : `<div class="ph">${c.name}</div>`;
+    const ctrl = scorable(c)
+      ? `<div class="inp"><label>your rating</label>
+           <input type="number" min="1" max="5" step="0.1" inputmode="decimal"
+                  data-i="${i}" placeholder="1–5"></div>`
+      : `<div class="skipnote">no win-rate data — skipped</div>`;
+    return `<div class="card" id="card-${i}">
+        <div class="art"><div class="pill ${rarityClass(c)}">${rarityLabel(c)}</div>${art}</div>
+        <div class="body">
+          <div class="nm">${c.name}</div>
+          <div class="cmeta"><span class="${rarityClass(c)}">${rarityLabel(c)}</span><span>${c.cost||c.set}</span></div>
+          ${ctrl}
+        </div></div>`;
+  }).join("");
+}
+
+function verdict(err){
+  if(err<0.5) return {cls:"ok", txt:"🎯"};
+  if(err<1.0) return {cls:"ok", txt:"👍"};
+  if(err<1.5) return {cls:"mid",txt:"~"};
+  return {cls:"off",txt:"✗"};
+}
+
+function reveal(){
+  let errSum=0, n=0, skipped=0, unanswered=0;
+  pack.forEach((c,i)=>{
+    const cardEl=$("card-"+i);
+    if(!scorable(c)){ skipped++; return; }
+    const inp=cardEl.querySelector("input");
+    const raw=inp.value.trim();
+    const body=cardEl.querySelector(".body");
+    cardEl.querySelector(".inp").remove();
+    if(raw===""){ // didn't guess
+      unanswered++;
+      body.insertAdjacentHTML("beforeend",
+        `<div class="res"><div class="row"><span>true</span><span class="truth">${f1(c.score)}</span></div>
+         <div class="row"><span>you</span><span>—</span></div>
+         <span class="tag mid">no guess</span></div>`);
+      cardEl.classList.add("mid");
+      return;
+    }
+    let g=Math.max(1,Math.min(5,parseFloat(raw)));
+    const err=Math.abs(g-c.score); errSum+=err; n++;
+    const v=verdict(err);
+    cardEl.classList.add(v.cls);
+    body.insertAdjacentHTML("beforeend",
+      `<div class="res">
+         <div class="row"><span>your score</span><span>${f1(g)}</span></div>
+         <div class="row"><span>true score</span><span class="truth">${f1(c.score)}</span></div>
+         <span class="tag ${v.cls}">off by ${f1(err)} ${v.txt}</span>
+       </div>`);
+  });
+  // highlight THE PICK — highest true score (2-decimal precision breaks 1-decimal ties)
+  let pickIdx=-1, best=-Infinity;
+  pack.forEach((c,i)=>{ if(scorable(c) && c.score>best){best=c.score; pickIdx=i;} });
+  if(pickIdx>=0){
+    const el=$("card-"+pickIdx); el.classList.add("pick");
+    el.querySelector(".art").insertAdjacentHTML("beforeend",`<div class="pickbadge">★ THE PICK</div>`);
+  }
+  S.scored+=n; S.errSum+=errSum; updateStats();
+  $("reveal").disabled=true;
+  showSummary(n,errSum,skipped,unanswered,pickIdx);
+}
+
+function showSummary(n,errSum,skipped,unanswered,pickIdx){
+  const avg = n?errSum/n:0;
+  let grade,gc;
+  if(avg<0.4){grade="S";gc="var(--c5)"} else if(avg<0.7){grade="A";gc="var(--c4)"}
+  else if(avg<1.0){grade="B";gc="var(--c3)"} else if(avg<1.4){grade="C";gc="var(--c2)"}
+  else {grade="D";gc="var(--c1)"}
+  const pick = pickIdx>=0 ? pack[pickIdx] : null;
+  $("summary").innerHTML =
+    `<div class="summaryhead">
+       <div class="grade" style="color:${gc}">${n?grade:"—"}</div>
+       <div><h2 style="margin:0">Pack ${S.packs}</h2>
+         <div class="sub" style="margin:2px 0 0">
+           Avg error <b style="color:var(--ink)">${n?f1(avg):"—"}</b> over ${n} rated card${n!==1?"s":""}
+           ${unanswered?` · ${unanswered} left blank`:""} · ${skipped} skipped (lands / specials).</div>
+         ${pick?`<div class="sub" style="margin:4px 0 0">The pick: <b style="color:var(--accent2)">★ ${pick.name}</b> (${f1(pick.score)}).</div>`:""}
+       </div>
+       <div style="margin-left:auto"><button class="btn" id="again">Open another ⚡</button></div>
+     </div>
+     <div class="sub" style="margin:0">Scroll up to see each card's true rating, your error, and the highlighted pick.</div>`;
+  show($("summary"));
+  $("again").onclick=startPack;
+  $("barinfo").textContent=`Pack ${S.packs}: avg error ${n?f1(avg):"—"} over ${n} cards.`;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function updateStats(){
+  $("st-packs").textContent=S.packs;
+  $("st-cards").textContent=S.scored;
+  $("st-err").textContent=S.scored?f1(S.errSum/S.scored):"—";
+}
+
+/* ---------- study list view ---------- */
+const RATED = DB.cards.filter(c=>c.score!=null).slice().sort((a,b)=>b.score-a.score);
+let studyFilter="all";
+function renderStudy(){
+  const q=$("studysearch").value.trim().toLowerCase();
+  const rows = RATED.filter(c=>(studyFilter==="all"||c.rarity===studyFilter)
+                              && (!q || c.name.toLowerCase().includes(q)));
+  $("studylist").innerHTML =
+    `<p class="scount">${rows.length} cards${studyFilter!=="all"?` · ${studyFilter}`:""} · sorted best → worst</p>`+
+    rows.map((c,i)=>{
+      const sc=c.score, hue = sc>=4?"var(--c5)":sc>=3.4?"var(--c4)":sc>=2.6?"var(--c3)":sc>=2?"var(--c2)":"var(--c1)";
+      const th=c.image||c.image_small;
+      return `<div class="srow">
+        <div class="rk">${i+1}</div>
+        ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
+        <div><div class="snm">${c.name}</div>
+             <div class="smeta ${"r-"+c.rarity}">${c.rarity}${c.cost?` · ${c.cost}`:""}${c.is_land?" · land":""}</div></div>
+        <div class="ssc" style="color:${hue}">${f1(sc)}</div>
+      </div>`;
+    }).join("");
+}
+function showView(which){
+  const play = which==="play";
+  $("playview").classList.toggle("hidden",!play);
+  $("bar").classList.toggle("hidden", !play || $("packwrap").classList.contains("hidden"));
+  $("studyview").classList.toggle("hidden",play);
+  $("nav-play").classList.toggle("active",play);
+  $("nav-study").classList.toggle("active",!play);
+  if(!play) renderStudy();
+}
+
+function init(){
+  if(!DB||!DB.cards){$("dataline").textContent="Could not load cards.js — run fetch_cards.py first.";return;}
+  $("dataline").innerHTML =
+    `${DB.rated_count} of ${DB.card_count} cards rated · WR range `+
+    `${f1(DB.wr_min*100)}%–${f1(DB.wr_max*100)}% · min ${DB.min_games} games · pools: `+
+    `${POOL.common.length}C / ${POOL.uncommon.length}U / ${POOL.rare.length}R / ${POOL.mythic.length}M · `+
+    `${POOL.commonLand.length} dual + ${POOL.basic.length} basic lands · ${POOL.mar.length} Marvel`;
+  $("foot").innerHTML =
+    `Score = (WR − minWR) × 4 / (maxWR − minWR) + 1. Data from `+
+    `<a href="${DB.source}" target="_blank">untapped.gg</a>; re-run `+
+    `<code>python3 fetch_cards.py</code> to refresh as win rates drift.`;
+  show($("start"));
+  $("open1").onclick=startPack;
+  $("reveal").onclick=reveal;
+  $("newpack").onclick=startPack;
+  // Enter on an input jumps to the next input
+  $("grid").addEventListener("keydown",e=>{
+    if(e.key!=="Enter"||e.target.tagName!=="INPUT")return;
+    e.preventDefault();
+    const inputs=[...$("grid").querySelectorAll("input")];
+    const idx=inputs.indexOf(e.target);
+    if(idx>=0&&idx<inputs.length-1)inputs[idx+1].focus(); else reveal();
+  });
+  // nav + study controls
+  $("nav-play").onclick=()=>showView("play");
+  $("nav-study").onclick=()=>showView("study");
+  $("studysearch").addEventListener("input",renderStudy);
+  $("studyfilters").addEventListener("click",e=>{
+    const b=e.target.closest(".fbtn"); if(!b)return;
+    studyFilter=b.dataset.r;
+    [...$("studyfilters").children].forEach(x=>x.classList.toggle("active",x===b));
+    renderStudy();
+  });
+}
+init();
+</script>
+</body>
+</html>
