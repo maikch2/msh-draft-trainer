@@ -5,11 +5,14 @@ compute each card's In-Hand Win Rate, and turn that into a 1-5 score.
 
 Output: cards.json  (consumed by the draft simulator in index.html)
 
-The score uses the user's formula, applied over every *rated* card:
+The score is the *percentile rank* of in-hand WR across every *rated* card,
+mapped onto a 1-5 scale:
 
-    score = (WR - minWR) * 4 / (maxWR - minWR) + 1
+    score = 1 + 4 * percentile_rank(WR)
 
-so the worst in-hand WR -> 1.0 and the best -> 5.0.
+so the worst in-hand WR -> 1.0, the best -> 5.0, and the median -> ~3.0.
+Ranking (rather than a linear min-max stretch of the raw WR) spreads the
+bell-shaped middle of the pack out into meaningful tiers.
 
 A card is "rated" only if it has at least --min-games total games played
 (default 500); brand-new sets have noisy low-sample cards. Unrated cards
@@ -113,19 +116,40 @@ def build_cards(data):
 
 
 def score_cards(cards, min_games):
+    """Score each rated card 1..5 by its *percentile rank* of in-hand WR.
+
+    Raw WR is roughly bell-shaped, so a linear min-max stretch piles most cards
+    into the middle. Ranking by percentile instead spreads the pack evenly: the
+    worst WR -> 1.0, the best -> 5.0, the median -> ~3.0. Tied WRs share the
+    average rank, so equal cards get equal scores.
+    """
     rated = [c for c in cards if c["win_rate"] is not None and c["total_games"] >= min_games]
+    n = len(rated)
     wrs = [c["win_rate"] for c in rated]
-    lo, hi = min(wrs), max(wrs)
-    span = (hi - lo) or 1e-9
+    lo, hi = (min(wrs), max(wrs)) if rated else (0.0, 0.0)
+
+    # average 0-based rank per distinct WR -> percentile in [0,1] -> score in [1,5]
+    by_wr = sorted(rated, key=lambda c: c["win_rate"])
+    pct = {}
+    i = 0
+    while i < n:
+        j = i
+        while j < n and by_wr[j]["win_rate"] == by_wr[i]["win_rate"]:
+            j += 1
+        avg_rank = (i + j - 1) / 2          # mean of tied positions
+        p = avg_rank / (n - 1) if n > 1 else 0.0
+        pct[by_wr[i]["win_rate"]] = p
+        i = j
+
     for c in cards:
         if c in rated:
-            s = (c["win_rate"] - lo) * 4 / span + 1
+            s = 1 + 4 * pct[c["win_rate"]]
             c["score"] = round(s, 2)
             c["tier"] = round(s)          # nearest integer 1..5, for guessing
         else:
             c["score"] = None
             c["tier"] = None
-    return lo, hi, len(rated)
+    return lo, hi, n
 
 
 # --------------------------------------------------------------------------
