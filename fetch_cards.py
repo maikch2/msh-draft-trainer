@@ -11,7 +11,7 @@ The score uses the user's formula, applied over every *rated* card:
 
 so the worst in-hand WR -> 1.0 and the best -> 5.0.
 
-A card is "rated" only if it has at least --min-games games-in-hand
+A card is "rated" only if it has at least --min-games total games played
 (default 500); brand-new sets have noisy low-sample cards. Unrated cards
 (and the basic-land / no-data cards) are still written out with score=null
 so the simulator can show them but skip them when scoring your guesses.
@@ -61,17 +61,20 @@ def parse_cost(cost):
 
 
 def in_hand_stats(stat):
-    """Sum games-in-hand and wins-in-hand across all rank tiers.
+    """Sum total games, games-in-hand and wins-in-hand across all rank tiers.
 
     Per card the structure is {'ALL': {tier: [[games],[avail_g,avail_w],[oh,ohw]]}}
-    where the 'available' (sub-array index 1) numbers are the in-hand games/wins.
+    where sub-array index 0 is total games the card was played, and index 1 is
+    the 'available' (in-hand) games/wins used for the in-hand win rate.
     """
-    games = wins = 0
+    total = games = wins = 0
     for arr in stat.get("ALL", {}).values():
+        if arr and arr[0]:
+            total += arr[0][0]
         if len(arr) > 1 and arr[1]:
             games += arr[1][0]
             wins += arr[1][1] if len(arr[1]) > 1 else 0
-    return games, wins
+    return total, games, wins
 
 
 def build_cards(data):
@@ -88,7 +91,7 @@ def build_cards(data):
         row = by_title.get(tid)
         if not row:
             continue
-        games, wins = in_hand_stats(stat)
+        total, games, wins = in_hand_stats(stat)
         wr = (wins / games) if games else None
         cost = parse_cost(row[7])
         cards.append({
@@ -99,6 +102,7 @@ def build_cards(data):
             "mana_value": row[8] if isinstance(row[8], int) else None,
             "cost": cost["text"],
             "colors": cost["colors"],
+            "total_games": total,
             "games": games,
             "win_rate": round(wr, 4) if wr is not None else None,
             "is_land": False,
@@ -108,7 +112,7 @@ def build_cards(data):
 
 
 def score_cards(cards, min_games):
-    rated = [c for c in cards if c["win_rate"] is not None and c["games"] >= min_games]
+    rated = [c for c in cards if c["win_rate"] is not None and c["total_games"] >= min_games]
     wrs = [c["win_rate"] for c in rated]
     lo, hi = min(wrs), max(wrs)
     span = (hi - lo) or 1e-9
@@ -186,7 +190,7 @@ def basic_lands_from(cache, set_code):
         out.append({
             "id": f"basic-{set_code}-{name}", "name": name, "set": set_code.upper(),
             "rarity": "basic", "mana_value": None, "cost": "", "colors": [],
-            "games": 0, "win_rate": None, "score": None, "tier": None,
+            "total_games": 0, "games": 0, "win_rate": None, "score": None, "tier": None,
             "is_land": True, "is_basic": True,
             "image": e.get("image"), "image_small": e.get("image_small"),
         })
@@ -196,7 +200,7 @@ def basic_lands_from(cache, set_code):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-games", type=int, default=500,
-                    help="min games-in-hand for a card to be ranked (default 500)")
+                    help="min total games played for a card to be ranked (default 500)")
     ap.add_argument("--no-images", action="store_true",
                     help="don't fetch card images from Scryfall")
     ap.add_argument("--out", default="cards.json")
@@ -209,7 +213,7 @@ def main():
     print(f"Parsed {len(cards)} cards with stats.")
 
     lo, hi, n = score_cards(cards, args.min_games)
-    print(f"Rated {n} cards (>= {args.min_games} games). "
+    print(f"Rated {n} cards (>= {args.min_games} total games). "
           f"WR range: {lo*100:.1f}% -> {hi*100:.1f}%")
 
     if not args.no_images:
