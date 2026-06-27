@@ -42,7 +42,7 @@
   .btn:disabled{opacity:.4;cursor:not-allowed}
 
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px}
-  .center{text-align:center}.hidden{display:none}
+  .center{text-align:center}.hidden{display:none!important}
 
   /* pack grid */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
@@ -102,6 +102,22 @@
   .srow .ssc{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
   .scount{color:var(--muted);font-size:12.5px;margin:0 0 10px}
 
+  /* signals (wheels / traps) */
+  .sigintro{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 20px;
+            background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .sigintro b{color:var(--ink)}
+  .sigsec{margin-bottom:28px}
+  .sigsec h2{font-size:16px;margin:0 0 3px}
+  .sigsec .blurb{color:var(--muted);font-size:12.5px;margin:0 0 10px;line-height:1.5}
+  .sigrow{display:grid;grid-template-columns:26px 56px 1fr auto;gap:12px;align-items:center;
+          padding:9px 10px;border-bottom:1px solid var(--line)}
+  .sigrow .th{width:56px;height:auto;border-radius:6px;display:block;background:#0e1119}
+  .sigrow .snm{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sigstats{display:flex;gap:16px}
+  .sigstats .stat{text-align:center;font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .sigstats .stat b{display:block;font-size:15px;font-weight:800;color:var(--ink);
+                    font-variant-numeric:tabular-nums;letter-spacing:0;text-transform:none}
+
   /* sticky action bar */
   .bar{position:fixed;left:0;right:0;bottom:0;background:rgba(11,13,20,.92);backdrop-filter:blur(8px);
        border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:14px;align-items:center;
@@ -122,6 +138,7 @@
     <nav class="nav">
       <button class="navbtn active" id="nav-play">🎴 Play</button>
       <button class="navbtn" id="nav-study">📋 Study list</button>
+      <button class="navbtn" id="nav-signals">🎯 Signals</button>
     </nav>
     <div class="stats">
       <div>Packs<b id="st-packs">0</b></div>
@@ -167,6 +184,27 @@
     <div id="studylist"></div>
   </div>
 
+  <!-- SIGNALS (wheels / traps) -->
+  <div id="signalsview" class="hidden">
+    <p class="sigintro">
+      Where the field's pick order (<b>ALSA</b> — avg last pick a card was still
+      available; higher = it wheels) disagrees with real power (<b>score</b>).
+      The <b>gap</b> is power-rank minus how-early-the-field-takes-it. Memorize your
+      scores; use this short list of <b>exceptions</b> to know what to wait on and
+      what to fade.
+    </p>
+    <div class="sigsec">
+      <h2>💎 Undervalued — let these wheel</h2>
+      <p class="blurb">Strong cards the field takes late. Prioritize other picks first; these tend to come back to you.</p>
+      <div id="wheels"></div>
+    </div>
+    <div class="sigsec">
+      <h2>🪤 Overhyped — let others take these</h2>
+      <p class="blurb">Cards the field grabs early that underperform in practice. Rarely worth a high pick.</p>
+      <div id="traps"></div>
+    </div>
+  </div>
+
   <footer id="foot"></footer>
 </div>
 
@@ -177,7 +215,7 @@
   <button class="btn" id="reveal">Reveal ratings ▸</button>
 </div>
 
-<script src="cards.js?v=3f643cc0"></script>
+<script src="cards.js?v=f6ff475f"></script>
 <script>
 "use strict";
 
@@ -378,14 +416,52 @@ function renderStudy(){
       </div>`;
     }).join("");
 }
+/* ---------- signals view (wheels / traps) ---------- */
+const GAP_MIN = 0.40, SIG_CAP = 15;   // |gap| threshold and max rows per list
+const SIG     = DB.cards.filter(c=>c.pick_gap!=null && c.alsa!=null);
+const wheelsAll = SIG.filter(c=>c.pick_gap>= GAP_MIN).sort((a,b)=>b.pick_gap-a.pick_gap);
+const trapsAll  = SIG.filter(c=>c.pick_gap<=-GAP_MIN).sort((a,b)=>a.pick_gap-b.pick_gap);
+const WHEELS = wheelsAll.slice(0,SIG_CAP);
+const TRAPS  = trapsAll.slice(0,SIG_CAP);
+function sigRows(list){
+  if(!list.length) return `<p class="scount">No cards meet the threshold.</p>`;
+  return list.map((c,i)=>{
+    const th=c.image||c.image_small, g=c.pick_gap;
+    const gc=g>=0?"var(--good)":"var(--bad)", sign=g>0?"+":"";
+    return `<div class="sigrow">
+      <div class="rk">${i+1}</div>
+      ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
+      <div><div class="snm">${c.name}</div>
+           <div class="smeta ${"r-"+c.rarity}">${c.rarity}${c.cost?` · ${c.cost}`:""}</div></div>
+      <div class="sigstats">
+        <div class="stat"><b>${f1(c.score)}</b>score</div>
+        <div class="stat"><b>${c.alsa.toFixed(1)}</b>alsa</div>
+        <div class="stat"><b style="color:${gc}">${sign}${g.toFixed(2)}</b>gap</div>
+      </div></div>`;
+  }).join("");
+}
+const sigCount=(shown,total)=>`<p class="scount">`+
+  (total>shown?`top ${shown} of ${total} (gap ≥ ${GAP_MIN.toFixed(2)})`
+             :`${shown} card${shown!==1?"s":""} (gap ≥ ${GAP_MIN.toFixed(2)})`)+`</p>`;
+let signalsBuilt=false;
+function renderSignals(){
+  if(signalsBuilt) return;            // static data — build once
+  $("wheels").innerHTML = sigCount(WHEELS.length,wheelsAll.length)+sigRows(WHEELS);
+  $("traps").innerHTML  = sigCount(TRAPS.length,trapsAll.length)+sigRows(TRAPS);
+  signalsBuilt=true;
+}
+
+const VIEWS = {play:"playview", study:"studyview", signals:"signalsview"};
 function showView(which){
-  const play = which==="play";
-  $("playview").classList.toggle("hidden",!play);
-  $("bar").classList.toggle("hidden", !play || $("packwrap").classList.contains("hidden"));
-  $("studyview").classList.toggle("hidden",play);
-  $("nav-play").classList.toggle("active",play);
-  $("nav-study").classList.toggle("active",!play);
-  if(!play) renderStudy();
+  if(!VIEWS[which]) which="play";
+  for(const k in VIEWS) $(VIEWS[k]).classList.toggle("hidden", k!==which);
+  $("nav-play").classList.toggle("active",   which==="play");
+  $("nav-study").classList.toggle("active",  which==="study");
+  $("nav-signals").classList.toggle("active",which==="signals");
+  $("bar").classList.toggle("hidden", which!=="play" || $("packwrap").classList.contains("hidden"));
+  if(which==="study")   renderStudy();
+  if(which==="signals") renderSignals();
+  if(location.hash.slice(1)!==which) location.hash=which;   // deep-link / bookmarkable
 }
 
 function init(){
@@ -396,7 +472,8 @@ function init(){
     `${POOL.common.length}C / ${POOL.uncommon.length}U / ${POOL.rare.length}R / ${POOL.mythic.length}M · `+
     `${POOL.commonLand.length} dual + ${POOL.basic.length} basic lands · ${POOL.mar.length} Marvel`;
   $("foot").innerHTML =
-    `Score = (WR − minWR) × 4 / (maxWR − minWR) + 1. Data from `+
+    `Score = percentile rank of in-hand WR, mapped to 1–5. Signals compare that `+
+    `to ALSA (pick order). Data from `+
     `<a href="${DB.source}" target="_blank">untapped.gg</a>; re-run `+
     `<code>python3 fetch_cards.py</code> to refresh as win rates drift.`;
   show($("start"));
@@ -420,6 +497,10 @@ function init(){
   // nav + study controls
   $("nav-play").onclick=()=>showView("play");
   $("nav-study").onclick=()=>showView("study");
+  $("nav-signals").onclick=()=>showView("signals");
+  window.addEventListener("hashchange",()=>showView(location.hash.slice(1)));
+  const startView=location.hash.slice(1);
+  if(VIEWS[startView]&&startView!=="play") showView(startView);
   $("studysearch").addEventListener("input",renderStudy);
   $("studyfilters").addEventListener("click",e=>{
     const b=e.target.closest(".fbtn"); if(!b)return;

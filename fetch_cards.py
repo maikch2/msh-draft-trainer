@@ -81,6 +81,37 @@ def in_hand_stats(stat):
     return total, games, wins
 
 
+def draft_pick_stats(data):
+    """title_id -> {'alsa': float|None, 'ata': float|None} across rank tiers.
+
+    ALSA = avg_last_pick_offered (latest pick the card was still available; a
+    HIGHER value means it wheels / is uncontested). ATA = avg_pick_chosen (how
+    early it's actually taken; LOWER means more contested). Each is a per-tier
+    dict weighted by offered_qty; a 0 value means 'no data' for that tier, so
+    those tiers are skipped rather than dragging the average toward zero.
+    """
+    ssr = data["props"]["pageProps"]["ssrProps"]
+    info = ssr.get("limitedDraftInfo", {}).get("data") or []
+    out = {}
+    for row in info:
+        qty = row.get("offered_qty", {})
+
+        def wavg(field):
+            num = den = 0.0
+            for tier, v in row.get(field, {}).items():
+                w = qty.get(tier, 0)
+                if v and w:               # skip empty / no-data tiers
+                    num += v * w
+                    den += w
+            return (num / den) if den else None
+
+        out[row.get("title_id")] = {
+            "alsa": wavg("avg_last_pick_offered"),
+            "ata": wavg("avg_pick_chosen"),
+        }
+    return out
+
+
 def build_cards(data):
     ssr = data["props"]["pageProps"]["ssrProps"]
     mj = ssr["minifiedMtgaJsonData"]
@@ -88,6 +119,7 @@ def build_cards(data):
     # cardData row layout (index): 1=title_id 6=set 7=mana_cost 8=mana_value 9=rarity
     by_title = {row[1]: row for row in mj["cardData"]}
     stats = ssr["limitedCardStatsResp"]["data"]["data"]
+    picks = draft_pick_stats(data)
 
     cards = []
     for tid_str, stat in stats.items():
@@ -98,6 +130,7 @@ def build_cards(data):
         total, games, wins = in_hand_stats(stat)
         wr = (wins / games) if games else None
         cost = parse_cost(row[7])
+        ps = picks.get(tid, {})
         cards.append({
             "id": tid,
             "name": id2name.get(tid, f"#{tid}"),
@@ -109,6 +142,8 @@ def build_cards(data):
             "total_games": total,
             "games": games,
             "win_rate": round(wr, 4) if wr is not None else None,
+            "alsa": round(ps["alsa"], 2) if ps.get("alsa") is not None else None,
+            "ata": round(ps["ata"], 2) if ps.get("ata") is not None else None,
             "is_land": False,
             "is_basic": False,
         })
@@ -150,6 +185,45 @@ def score_cards(cards, min_games):
             c["score"] = None
             c["tier"] = None
     return lo, hi, n
+
+
+def _percentile_by(items, value_fn):
+    """{id(item): percentile in [0,1]} ranking items by value_fn (ties share rank)."""
+    items = sorted(items, key=value_fn)
+    n = len(items)
+    out = {}
+    i = 0
+    while i < n:
+        j = i
+        while j < n and value_fn(items[j]) == value_fn(items[i]):
+            j += 1
+        p = ((i + j - 1) / 2) / (n - 1) if n > 1 else 0.0
+        for k in range(i, j):
+            out[id(items[k])] = p
+        i = j
+    return out
+
+
+def tag_pick_signals(cards):
+    """Flag undervalued 'wheels' and overhyped 'traps' via the power-vs-crowd gap.
+
+    power_pct = where the card's WR ranks   (0 worst .. 1 best) = (score-1)/4
+    crowd_pct = how early the field takes it (0 wheels .. 1 first-picked), from
+                ALSA -- lower ALSA = more contested = higher crowd_pct.
+    pick_gap  = power_pct - crowd_pct:
+        > 0  field lets a strong card wheel -> UNDERVALUED (you can wait on it)
+        < 0  field grabs a weak card early  -> OVERHYPED (let others take it)
+    Cards without ALSA (or unrated) get pick_gap = None.
+    """
+    rated = [c for c in cards if c.get("score") is not None and c.get("alsa") is not None]
+    rated_ids = {id(c) for c in rated}
+    crowd = _percentile_by(rated, lambda c: -c["alsa"])
+    for c in cards:
+        if id(c) in rated_ids:
+            c["pick_gap"] = round((c["score"] - 1) / 4 - crowd[id(c)], 2)
+        else:
+            c["pick_gap"] = None
+    return len(rated)
 
 
 # --------------------------------------------------------------------------
@@ -216,6 +290,7 @@ def basic_lands_from(cache, set_code):
             "id": f"basic-{set_code}-{name}", "name": name, "set": set_code.upper(),
             "rarity": "basic", "mana_value": None, "cost": "", "colors": [],
             "total_games": 0, "games": 0, "win_rate": None, "score": None, "tier": None,
+            "alsa": None, "ata": None, "pick_gap": None,
             "is_land": True, "is_basic": True,
             "image": e.get("image"), "image_small": e.get("image_small"),
         })
@@ -240,6 +315,9 @@ def main():
     lo, hi, n = score_cards(cards, args.min_games)
     print(f"Rated {n} cards (>= {args.min_games} total games). "
           f"WR range: {lo*100:.1f}% -> {hi*100:.1f}%")
+
+    sig = tag_pick_signals(cards)
+    print(f"Tagged pick signals (power vs ALSA) for {sig} cards.")
 
     if not args.no_images:
         print("Fetching card images from Scryfall ...")
