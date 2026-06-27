@@ -311,7 +311,7 @@ function renderPack(){
                   data-i="${i}" placeholder="1–5"></div>`
       : `<div class="skipnote">no win-rate data — skipped</div>`;
     return `<div class="card" id="card-${i}">
-        <div class="art"><div class="pill ${rarityClass(c)}">${rarityLabel(c)}</div>${art}</div>
+        <div class="art">${art}</div>
         <div class="body">
           <div class="nm">${c.name}</div>
           <div class="cmeta"><span class="${rarityClass(c)}">${rarityLabel(c)}</span><span>${c.cost||c.set}</span></div>
