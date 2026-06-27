@@ -23,6 +23,7 @@ Run again any time -- the win rates drift as more games are played.
     python3 fetch_cards.py --min-games 300
 """
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -240,11 +241,31 @@ def main():
     # Also emit a JS wrapper so index.html works when opened directly
     # via file:// (where fetch() of a local .json is blocked by the browser).
     js_out = args.out.rsplit(".", 1)[0] + ".js"
+    js_body = "window.__CARDS__ = " + json.dumps(payload, ensure_ascii=False) + ";\n"
     with open(js_out, "w") as f:
-        f.write("window.__CARDS__ = ")
-        json.dump(payload, f, ensure_ascii=False)
-        f.write(";\n")
+        f.write(js_body)
     print(f"Wrote {js_out} (open index.html directly, no server needed).")
+
+    # Bump the cache-busting ?v= on the cards.js <script> tag in index.html to a
+    # content hash, so browsers (esp. iOS Safari) and GitHub Pages' CDN fetch the
+    # fresh file instead of serving a stale cached copy.
+    bump_cache_version(js_out, js_body)
+
+
+def bump_cache_version(js_out, js_body, html_path="index.html"):
+    ver = hashlib.md5(js_body.encode("utf-8")).hexdigest()[:8]
+    try:
+        with open(html_path) as f:
+            html = f.read()
+    except FileNotFoundError:
+        return
+    new_html, n = re.subn(
+        r'(<script src="%s)(\?v=[^"]*)?(")' % re.escape(js_out),
+        r'\1?v=%s\3' % ver, html)
+    if n and new_html != html:
+        with open(html_path, "w") as f:
+            f.write(new_html)
+        print(f"Stamped {html_path} -> {js_out}?v={ver}")
 
 
 if __name__ == "__main__":
