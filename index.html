@@ -93,13 +93,17 @@
   .fbtn{background:var(--panel2);color:var(--muted);border:1px solid var(--line);
         padding:7px 12px;font-size:12.5px;font-weight:700;border-radius:9px}
   .fbtn.active{color:var(--ink);border-color:var(--accent2)}
-  .srow{display:grid;grid-template-columns:34px 104px 1fr auto;gap:14px;align-items:center;
+  .srow{display:grid;grid-template-columns:34px 104px 1fr;gap:14px;align-items:center;
         padding:9px 10px;border-bottom:1px solid var(--line)}
   .srow .rk{color:var(--muted);font-size:12px;text-align:right}
+  .srow .thumb{position:relative;width:104px}
   .srow .th{width:104px;height:auto;border-radius:7px;display:block;background:#0e1119}
+  .srow .scorebadge{position:absolute;top:4px;right:4px;min-width:28px;text-align:center;
+        background:rgba(0,0,0,.82);border:1.5px solid currentColor;border-radius:9px;
+        padding:2px 7px;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;
+        box-shadow:0 1px 5px rgba(0,0,0,.55)}
   .srow .snm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .srow .smeta{font-size:11px;color:var(--muted)}
-  .srow .ssc{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
   .scount{color:var(--muted);font-size:12.5px;margin:0 0 10px}
 
   /* signals (wheels / traps) */
@@ -409,10 +413,12 @@ function renderStudy(){
       const th=c.image||c.image_small;
       return `<div class="srow">
         <div class="rk">${i+1}</div>
-        ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
+        <div class="thumb">
+          ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
+          <span class="scorebadge" style="color:${hue}">${f1(sc)}</span>
+        </div>
         <div><div class="snm">${c.name}</div>
              <div class="smeta ${"r-"+c.rarity}">${c.rarity}${c.cost?` · ${c.cost}`:""}${c.is_land?" · land":""}</div></div>
-        <div class="ssc" style="color:${hue}">${f1(sc)}</div>
       </div>`;
     }).join("");
 }
