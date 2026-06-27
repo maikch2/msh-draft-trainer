@@ -93,6 +93,8 @@
   .fbtn{background:var(--panel2);color:var(--muted);border:1px solid var(--line);
         padding:7px 12px;font-size:12.5px;font-weight:700;border-radius:9px}
   .fbtn.active{color:var(--ink);border-color:var(--accent2)}
+  .cdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;
+        vertical-align:middle;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
   .srow{display:grid;grid-template-columns:34px 104px 1fr;gap:14px;align-items:center;
         padding:9px 10px;border-bottom:1px solid var(--line)}
   .srow .rk{color:var(--muted);font-size:12px;text-align:right}
@@ -183,6 +185,14 @@
         <button class="fbtn" data-r="uncommon">Uncommon</button>
         <button class="fbtn" data-r="rare">Rare</button>
         <button class="fbtn" data-r="mythic">Mythic</button>
+      </div>
+      <div class="filters" id="studycolors">
+        <button class="fbtn active" data-c="all">All</button>
+        <button class="fbtn" data-c="W"><span class="cdot" style="background:#f3edc8"></span>White</button>
+        <button class="fbtn" data-c="U"><span class="cdot" style="background:#4a90d9"></span>Blue</button>
+        <button class="fbtn" data-c="B"><span class="cdot" style="background:#8a8a96"></span>Black</button>
+        <button class="fbtn" data-c="R"><span class="cdot" style="background:#d9534f"></span>Red</button>
+        <button class="fbtn" data-c="G"><span class="cdot" style="background:#4aaf5f"></span>Green</button>
       </div>
     </div>
     <div id="studylist"></div>
@@ -401,13 +411,16 @@ function updateStats(){
 
 /* ---------- study list view ---------- */
 const RATED = DB.cards.filter(c=>c.score!=null).slice().sort((a,b)=>b.score-a.score);
-let studyFilter="all";
+const COLORNAME = {W:"white",U:"blue",B:"black",R:"red",G:"green"};
+let studyFilter="all", colorFilter="all";
 function renderStudy(){
   const q=$("studysearch").value.trim().toLowerCase();
   const rows = RATED.filter(c=>(studyFilter==="all"||c.rarity===studyFilter)
+                              && (colorFilter==="all"||(c.colors&&c.colors.includes(colorFilter)))
                               && (!q || c.name.toLowerCase().includes(q)));
+  const tags=[studyFilter!=="all"?studyFilter:null, colorFilter!=="all"?COLORNAME[colorFilter]:null].filter(Boolean);
   $("studylist").innerHTML =
-    `<p class="scount">${rows.length} cards${studyFilter!=="all"?` · ${studyFilter}`:""} · sorted best → worst</p>`+
+    `<p class="scount">${rows.length} cards${tags.length?` · ${tags.join(" · ")}`:""} · sorted best → worst</p>`+
     rows.map((c,i)=>{
       const sc=c.score, hue = sc>=4?"var(--c5)":sc>=3.4?"var(--c4)":sc>=2.6?"var(--c3)":sc>=2?"var(--c2)":"var(--c1)";
       const th=c.image||c.image_small;
@@ -512,6 +525,12 @@ function init(){
     const b=e.target.closest(".fbtn"); if(!b)return;
     studyFilter=b.dataset.r;
     [...$("studyfilters").children].forEach(x=>x.classList.toggle("active",x===b));
+    renderStudy();
+  });
+  $("studycolors").addEventListener("click",e=>{
+    const b=e.target.closest(".fbtn"); if(!b)return;
+    colorFilter=b.dataset.c;
+    [...$("studycolors").children].forEach(x=>x.classList.toggle("active",x===b));
     renderStudy();
   });
 }
