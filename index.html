@@ -248,8 +248,8 @@
     <div id="rankpick" class="panel center">
       <h2>Guess a card's rank within a color</h2>
       <p class="sub" style="margin:8px auto 18px;max-width:560px">
-        Pick a color. For each card, decide whether it's a <b>top-15</b> card in that color —
-        if so, guess its exact rank (<b>1 = best</b>); if not, hit <b>“Not in top 15”</b>.
+        Pick a color. For each card, decide whether it's a <b>top-25</b> card in that color —
+        if so, guess its exact rank (<b>1 = best</b>); if not, hit <b>“Not in top 25”</b>.
         Rarer cards appear less often, commons more.
       </p>
       <div class="filters" style="justify-content:center" id="rankcolors"></div>
@@ -573,7 +573,7 @@ function weightedPick(arr, exclude){
 let rankColor=null, rankCard=null, rankRevealed=false;
 const rankStats={n:0, hits:0, rankErrSum:0, rankErrN:0};
 const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
-const rankTop = () => Math.min(15, RANK_BY_COLOR[rankColor].length);
+const rankTop = () => Math.min(25, RANK_BY_COLOR[rankColor].length);
 
 function showRankPick(){
   rankColor=null;
