@@ -26,6 +26,7 @@ Run again any time -- the win rates drift as more games are played.
     python3 fetch_cards.py --min-games 300
 """
 import argparse
+import datetime
 import hashlib
 import json
 import re
@@ -226,6 +227,38 @@ def tag_pick_signals(cards):
     return len(rated)
 
 
+def diff_report(cards, old_path, top=25):
+    """(rows, since): the top-N cards whose score moved most since last run.
+
+    Reads the *previous* output file (call this BEFORE overwriting it) and
+    compares scores by card id. Cards that just entered or left the rated set
+    (old or new score is None) are skipped -- their "change" is an artifact of
+    the games-played threshold, not a real power shift. Sorted by |diff| desc.
+    """
+    try:
+        with open(old_path) as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        return [], None                      # no/unreadable previous file
+    prev = {c["id"]: c.get("score") for c in old.get("cards", [])}
+    rows = []
+    for c in cards:
+        new_s, old_s = c.get("score"), prev.get(c["id"])
+        if new_s is None or old_s is None:   # newly rated / newly dropped -> skip
+            continue
+        diff = round(new_s - old_s, 2)
+        if diff == 0:
+            continue
+        rows.append({
+            "id": c["id"], "name": c["name"], "rarity": c["rarity"],
+            "cost": c["cost"], "set": c["set"],
+            "image": c.get("image"), "image_small": c.get("image_small"),
+            "old": old_s, "new": new_s, "diff": diff,
+        })
+    rows.sort(key=lambda r: abs(r["diff"]), reverse=True)
+    return rows[:top], old.get("generated_at")
+
+
 # --------------------------------------------------------------------------
 # Optional: enrich with Scryfall card images (one batched request per set).
 # --------------------------------------------------------------------------
@@ -327,13 +360,25 @@ def main():
         print(f"  added {len(basics)} basic lands: {', '.join(b['name'] for b in basics)}")
 
     cards.sort(key=lambda c: (c["score"] is None, -(c["score"] or 0)))
+
+    # Compare against the previous cards.json (still on disk) before we clobber it.
+    changes, since = diff_report(cards, args.out)
+    if changes:
+        print(f"Top {len(changes)} score movers"
+              + (f" since {since}." if since else " vs previous cards.json."))
+    else:
+        print("No previous cards.json to diff against (first run).")
+
     payload = {
         "source": PAGE_URL,
+        "generated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "min_games": args.min_games,
         "wr_min": round(lo, 4),
         "wr_max": round(hi, 4),
         "rated_count": n,
         "card_count": len(cards),
+        "changes_since": since,
+        "changes": changes,
         "cards": cards,
     }
     with open(args.out, "w") as f:

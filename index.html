@@ -145,6 +145,7 @@
       <button class="navbtn active" id="nav-play">🎴 Play</button>
       <button class="navbtn" id="nav-study">📋 Study list</button>
       <button class="navbtn" id="nav-signals">🎯 Signals</button>
+      <button class="navbtn" id="nav-changes">📈 Changes</button>
     </nav>
     <div class="stats">
       <div>Packs<b id="st-packs">0</b></div>
@@ -219,6 +220,12 @@
     </div>
   </div>
 
+  <!-- CHANGES (biggest score movers since last refresh) -->
+  <div id="changesview" class="hidden">
+    <p class="sigintro" id="changesintro"></p>
+    <div id="changeslist"></div>
+  </div>
+
   <footer id="foot"></footer>
 </div>
 
@@ -229,7 +236,7 @@
   <button class="btn" id="reveal">Reveal ratings ▸</button>
 </div>
 
-<script src="cards.js?v=f6ff475f"></script>
+<script src="cards.js?v=450fbd04"></script>
 <script>
 "use strict";
 
@@ -431,7 +438,7 @@ function renderStudy(){
           <span class="scorebadge" style="color:${hue}">${f1(sc)}</span>
         </div>
         <div><div class="snm">${c.name}</div>
-             <div class="smeta ${"r-"+c.rarity}">${c.rarity}${c.cost?` · ${c.cost}`:""}${c.is_land?" · land":""}</div></div>
+             <div class="smeta ${rarityClass(c)}">${rarityLabel(c)}${c.cost?` · ${c.cost}`:""}${c.is_land?" · land":""}</div></div>
       </div>`;
     }).join("");
 }
@@ -451,7 +458,7 @@ function sigRows(list){
       <div class="rk">${i+1}</div>
       ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
       <div><div class="snm">${c.name}</div>
-           <div class="smeta ${"r-"+c.rarity}">${c.rarity}${c.cost?` · ${c.cost}`:""}</div></div>
+           <div class="smeta ${rarityClass(c)}">${rarityLabel(c)}${c.cost?` · ${c.cost}`:""}</div></div>
       <div class="sigstats">
         <div class="stat"><b>${f1(c.score)}</b>score</div>
         <div class="stat"><b>${c.alsa.toFixed(1)}</b>alsa</div>
@@ -470,16 +477,49 @@ function renderSignals(){
   signalsBuilt=true;
 }
 
-const VIEWS = {play:"playview", study:"studyview", signals:"signalsview"};
+/* ---------- changes view (biggest score movers since last refresh) ---------- */
+const CHANGES = DB.changes || [];
+let changesBuilt=false;
+function renderChanges(){
+  if(changesBuilt) return;            // static data — build once
+  $("changesintro").innerHTML =
+    `The ${CHANGES.length} cards whose <b>score</b> moved most`+
+    (DB.changes_since?` since the last refresh (<b>${DB.changes_since}</b>)`:` since the previous data`)+
+    `. Cards that just crossed the games-played threshold (newly rated or dropped) are excluded — their change is an artifact, not a real shift.`;
+  if(!CHANGES.length){
+    $("changeslist").innerHTML=`<p class="scount">No previous database to compare against yet — run <code>fetch_cards.py</code> again after the next update.</p>`;
+    changesBuilt=true; return;
+  }
+  $("changeslist").innerHTML = `<p class="scount">${CHANGES.length} cards · biggest change first</p>`+
+    CHANGES.map((c,i)=>{
+      const th=c.image||c.image_small, d=c.diff, up=d>0;
+      const dc=up?"var(--good)":"var(--bad)", arw=up?"▲":"▼", sign=up?"+":"";
+      return `<div class="sigrow" title="${c.name}: ${f1(c.old)} → ${f1(c.new)} (${sign}${d.toFixed(2)})">
+        <div class="rk">${i+1}</div>
+        ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
+        <div><div class="snm">${c.name}</div>
+             <div class="smeta ${rarityClass(c)}">${rarityLabel(c)}${c.cost?` · ${c.cost}`:""}</div></div>
+        <div class="sigstats">
+          <div class="stat"><b>${f1(c.old)}</b>old</div>
+          <div class="stat"><b>${f1(c.new)}</b>new</div>
+          <div class="stat"><b style="color:${dc}">${arw}${sign}${d.toFixed(2)}</b>diff</div>
+        </div></div>`;
+    }).join("");
+  changesBuilt=true;
+}
+
+const VIEWS = {play:"playview", study:"studyview", signals:"signalsview", changes:"changesview"};
 function showView(which){
   if(!VIEWS[which]) which="play";
   for(const k in VIEWS) $(VIEWS[k]).classList.toggle("hidden", k!==which);
   $("nav-play").classList.toggle("active",   which==="play");
   $("nav-study").classList.toggle("active",  which==="study");
   $("nav-signals").classList.toggle("active",which==="signals");
+  $("nav-changes").classList.toggle("active",which==="changes");
   $("bar").classList.toggle("hidden", which!=="play" || $("packwrap").classList.contains("hidden"));
   if(which==="study")   renderStudy();
   if(which==="signals") renderSignals();
+  if(which==="changes") renderChanges();
   if(location.hash.slice(1)!==which) location.hash=which;   // deep-link / bookmarkable
 }
 
@@ -517,6 +557,7 @@ function init(){
   $("nav-play").onclick=()=>showView("play");
   $("nav-study").onclick=()=>showView("study");
   $("nav-signals").onclick=()=>showView("signals");
+  $("nav-changes").onclick=()=>showView("changes");
   window.addEventListener("hashchange",()=>showView(location.hash.slice(1)));
   const startView=location.hash.slice(1);
   if(VIEWS[startView]&&startView!=="play") showView(startView);
