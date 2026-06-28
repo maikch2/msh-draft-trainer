@@ -118,6 +118,11 @@
   .sigrow{display:grid;grid-template-columns:26px 56px 1fr auto;gap:12px;align-items:center;
           padding:9px 10px;border-bottom:1px solid var(--line)}
   .sigrow .th{width:56px;height:auto;border-radius:6px;display:block;background:#0e1119}
+  .sigrow .cthumb{position:relative;width:56px}
+  .sigrow .cbadge{position:absolute;bottom:3px;left:3px;min-width:20px;text-align:center;
+        background:rgba(0,0,0,.55);border:1px solid currentColor;border-radius:6px;
+        padding:0 4px;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;
+        box-shadow:0 1px 3px rgba(0,0,0,.5)}
   .sigrow .snm{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .sigstats{display:flex;gap:16px}
   .sigstats .stat{text-align:center;font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
@@ -275,6 +280,7 @@ const S = { packs:0, scored:0, errSum:0 };
 const $ = id => document.getElementById(id);
 const pick = a => a[Math.floor(Math.random()*a.length)];
 const f1 = n => n.toFixed(1);
+const scoreHue = s => s>=4?"var(--c5)":s>=3.4?"var(--c4)":s>=2.6?"var(--c3)":s>=2?"var(--c2)":"var(--c1)";
 function sample(arr,n,used){const out=[];let guard=0;while(out.length<n&&guard++<999){const c=pick(arr);if(c&&!used.has(c.id)){used.add(c.id);out.push(c);}if(used.size>=arr.length)break;}return out;}
 
 function buildPack(){
@@ -429,7 +435,7 @@ function renderStudy(){
   $("studylist").innerHTML =
     `<p class="scount">${rows.length} cards${tags.length?` · ${tags.join(" · ")}`:""} · sorted best → worst</p>`+
     rows.map((c,i)=>{
-      const sc=c.score, hue = sc>=4?"var(--c5)":sc>=3.4?"var(--c4)":sc>=2.6?"var(--c3)":sc>=2?"var(--c2)":"var(--c1)";
+      const sc=c.score, hue = scoreHue(sc);
       const th=c.image||c.image_small;
       return `<div class="srow">
         <div class="rk">${i+1}</div>
@@ -496,12 +502,14 @@ function renderChanges(){
       const dc=up?"var(--good)":"var(--bad)", arw=up?"▲":"▼", sign=up?"+":"";
       return `<div class="sigrow" title="${c.name}: ${f1(c.old)} → ${f1(c.new)} (${sign}${d.toFixed(2)})">
         <div class="rk">${i+1}</div>
-        ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
+        <div class="cthumb">
+          ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
+          <span class="cbadge" style="color:${scoreHue(c.new)}">${f1(c.new)}</span>
+        </div>
         <div><div class="snm">${c.name}</div>
              <div class="smeta ${rarityClass(c)}">${rarityLabel(c)}${c.cost?` · ${c.cost}`:""}</div></div>
         <div class="sigstats">
           <div class="stat"><b>${f1(c.old)}</b>old</div>
-          <div class="stat"><b>${f1(c.new)}</b>new</div>
           <div class="stat"><b style="color:${dc}">${arw}${sign}${d.toFixed(2)}</b>diff</div>
         </div></div>`;
     }).join("");
