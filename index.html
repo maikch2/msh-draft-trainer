@@ -36,7 +36,7 @@
   .navbtn.active{color:var(--ink);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   button{font:inherit;cursor:pointer;border:none;border-radius:10px}
   .btn{background:var(--accent);color:#fff;padding:11px 22px;font-weight:700;letter-spacing:.3px;
-       box-shadow:0 4px 16px rgba(230,36,41,.35)}
+       box-shadow:0 4px 16px rgba(0,0,0,.35)}
   .btn:hover{filter:brightness(1.08)}
   .btn.ghost{background:var(--panel2);color:var(--ink);box-shadow:none;border:1px solid var(--line)}
   .btn:disabled{opacity:.4;cursor:not-allowed}
@@ -162,7 +162,8 @@
 <body>
 <div class="wrap">
   <header>
-    <div><h1><span class="mk">MARVEL</span> Super Heroes — Draft Rating Trainer</h1></div>
+    <div><h1 id="settitle"><span class="mk">MARVEL</span> Super Heroes — Draft Rating Trainer</h1></div>
+    <nav class="nav" id="setnav" title="Switch set"></nav>
     <nav class="nav">
       <button class="navbtn active" id="nav-play">🎴 Play</button>
       <button class="navbtn" id="nav-study">📋 Study list</button>
@@ -182,11 +183,7 @@
   <!-- START -->
   <div id="start" class="panel center hidden">
     <h2>Open a booster and rate every card</h2>
-    <p class="sub" style="margin:8px auto 18px;max-width:600px">
-      A simulated MSH Play Booster is dealt face-up. Type a rating from <b>1.0</b> (worst)
-      to <b>5.0</b> (bomb) for each card — decimals welcome, e.g. <b>3.5</b> — then hit
-      <b>Reveal</b> to see the true ratings (from real In-Hand Win Rates) and how close you were.
-    </p>
+    <p class="sub" style="margin:8px auto 18px;max-width:600px" id="startblurb"></p>
     <button class="btn" id="open1">Open Booster ⚡</button>
   </div>
 
@@ -279,42 +276,49 @@
   <button class="btn" id="reveal">Reveal ratings ▸</button>
 </div>
 
-<script src="cards.js?v=74eda64d"></script>
+<script src="cards.js?v=9901c79c"></script>
+<script src="cards_hob.js?v=14f98bed"></script>
 <script>
 "use strict";
 
 /* ============================================================
-   BOOSTER MODEL  (edit to change the simulation)
+   PER-SET CONFIG  (booster model + theming; edit to change the
+   simulation)
    ------------------------------------------------------------
-   14-card MSH Play Booster:
+   14-card Play Booster:
      • 1 Rare-or-Mythic slot   (mythic ~13.5% of the time)
      • 3 Uncommons
      • 9 Commons (non-land)
      • 1 Land slot — ~50% a basic land, ~50% a common dual land.
-       (Basic lands have no win-rate data, so they're shown but
+       (Basic lands have no rating data, so they're shown but
         skipped when scoring your guesses.)
-     • A Marvel Universe special card replaces a common in ~8%
-       of packs (Arena's "special guest" slot).
+     • MSH only: a Marvel Universe special card replaces a
+       common in ~8% of packs (Arena's "special guest" slot).
    ============================================================ */
-const BOOSTER = {
-  size: 14,
-  rareMythicSlots: 1, mythicChance: 0.135,
-  uncommons: 3,
-  commons: 9,
-  landSlots: 1, basicLandChance: 0.50,
-  marChance: 0.08,
+const SET_META = {
+  MSH: {
+    title: '<span class="mk">MARVEL</span> Super Heroes — Draft Rating Trainer',
+    accent: "#e62429",
+    booster: { size:14, rareMythicSlots:1, mythicChance:0.135, uncommons:3,
+               commons:9, landSlots:1, basicLandChance:0.50, marChance:0.08 },
+  },
+  HOB: {
+    title: '<span class="mk">THE HOBBIT</span> — Draft Rating Trainer',
+    accent: "#2e9d52",
+    booster: { size:14, rareMythicSlots:1, mythicChance:0.135, uncommons:3,
+               commons:9, landSlots:1, basicLandChance:0.50, marChance:0 },
+  },
 };
 
-const DB = window.__CARDS__;
-const POOL = { common:[], commonLand:[], uncommon:[], rare:[], mythic:[], mar:[], basic:[] };
-for (const c of DB.cards) {
-  if (c.is_basic)            POOL.basic.push(c);
-  else if (c.set === "MAR")  POOL.mar.push(c);
-  else if (c.rarity === "common") (c.is_land ? POOL.commonLand : POOL.common).push(c);
-  else if (POOL[c.rarity])   POOL[c.rarity].push(c);
-}
+// Sets registered by the cards_*.js files (legacy cards.js only sets __CARDS__).
+const ALL_SETS = window.__CARDS_BY_SET__ || (window.__CARDS__ ? {MSH: window.__CARDS__} : {});
 
-const S = { packs:0, scored:0, errSum:0 };
+/* current-set state — (re)built by loadSet() */
+let SET=null, DB=null, BOOSTER=null, POOL=null;
+let RATED=[], RANK_BY_COLOR={}, wheelsAll=[], trapsAll=[], WHEELS=[], TRAPS=[], CHANGES=[];
+let signalsBuilt=false, changesBuilt=false, currentView="play";
+
+const S = { packs:0, scored:0, errSum:0 };   // session stats (across sets)
 const $ = id => document.getElementById(id);
 const pick = a => a[Math.floor(Math.random()*a.length)];
 const f1 = n => n.toFixed(1);
@@ -370,7 +374,7 @@ function renderPack(){
       ? `<div class="inp"><label>your rating</label>
            <input type="text" inputmode="decimal" pattern="[0-9.,]*"
                   data-i="${i}" placeholder="1–5"></div>`
-      : `<div class="skipnote">no win-rate data — skipped</div>`;
+      : `<div class="skipnote">no rating data — skipped</div>`;
     return `<div class="card" id="card-${i}">
         <div class="art">${art}</div>
         <div class="body">
@@ -414,6 +418,7 @@ function reveal(){
       `<div class="res">
          <div class="row"><span>your score</span><span>${f1(g)}</span></div>
          <div class="row"><span>true score</span><span class="truth">${f1(c.score)}</span></div>
+         ${c.ds_rating!=null?`<div class="row"><span>draftsim</span><span>${c.ds_rating.toFixed(1)}</span></div>`:""}
          <span class="tag ${v.cls}">off by ${f1(err)} ${v.txt}</span>
        </div>`);
   });
@@ -461,7 +466,6 @@ function updateStats(){
 }
 
 /* ---------- study list view ---------- */
-const RATED = DB.cards.filter(c=>c.score!=null).slice().sort((a,b)=>b.score-a.score);
 const COLORNAME = {W:"white",U:"blue",B:"black",R:"red",G:"green"};
 let studyFilter="all", colorFilter="all";
 function renderStudy(){
@@ -488,11 +492,6 @@ function renderStudy(){
 }
 /* ---------- signals view (wheels / traps) ---------- */
 const GAP_MIN = 0.40, SIG_CAP = 15;   // |gap| threshold and max rows per list
-const SIG     = DB.cards.filter(c=>c.pick_gap!=null && c.alsa!=null);
-const wheelsAll = SIG.filter(c=>c.pick_gap>= GAP_MIN).sort((a,b)=>b.pick_gap-a.pick_gap);
-const trapsAll  = SIG.filter(c=>c.pick_gap<=-GAP_MIN).sort((a,b)=>a.pick_gap-b.pick_gap);
-const WHEELS = wheelsAll.slice(0,SIG_CAP);
-const TRAPS  = trapsAll.slice(0,SIG_CAP);
 function sigRows(list){
   if(!list.length) return `<p class="scount">No cards meet the threshold.</p>`;
   return list.map((c,i)=>{
@@ -513,25 +512,28 @@ function sigRows(list){
 const sigCount=(shown,total)=>`<p class="scount">`+
   (total>shown?`top ${shown} of ${total} (gap ≥ ${GAP_MIN.toFixed(2)})`
              :`${shown} card${shown!==1?"s":""} (gap ≥ ${GAP_MIN.toFixed(2)})`)+`</p>`;
-let signalsBuilt=false;
 function renderSignals(){
-  if(signalsBuilt) return;            // static data — build once
+  if(signalsBuilt) return;            // static per set — build once
+  if(!wheelsAll.length && !trapsAll.length && DB.rating_source==="draftsim"){
+    $("wheels").innerHTML = `<p class="scount">No pick-order (ALSA) data yet — draftsim ratings don't include it. `+
+      `This view lights up automatically once untapped.gg has draft data for ${DB.set_name||SET}.</p>`;
+    $("traps").innerHTML = "";
+    signalsBuilt=true; return;
+  }
   $("wheels").innerHTML = sigCount(WHEELS.length,wheelsAll.length)+sigRows(WHEELS);
   $("traps").innerHTML  = sigCount(TRAPS.length,trapsAll.length)+sigRows(TRAPS);
   signalsBuilt=true;
 }
 
 /* ---------- changes view (biggest score movers since last refresh) ---------- */
-const CHANGES = DB.changes || [];
-let changesBuilt=false;
 function renderChanges(){
-  if(changesBuilt) return;            // static data — build once
+  if(changesBuilt) return;            // static per set — build once
   $("changesintro").innerHTML =
     `The ${CHANGES.length} cards whose <b>score</b> moved most`+
     (DB.changes_since?` since the last refresh (<b>${DB.changes_since}</b>)`:` since the previous data`)+
     `. Cards that just crossed the games-played threshold (newly rated or dropped) are excluded — their change is an artifact, not a real shift.`;
   if(!CHANGES.length){
-    $("changeslist").innerHTML=`<p class="scount">No previous database to compare against yet — run <code>fetch_cards.py</code> again after the next update.</p>`;
+    $("changeslist").innerHTML=`<p class="scount">No previous database to compare against yet — run <code>fetch_cards.py${SET==="MSH"?"":" --set "+SET.toLowerCase()}</code> again after the next update.</p>`;
     changesBuilt=true; return;
   }
   $("changeslist").innerHTML = `<p class="scount">${CHANGES.length} cards · biggest change first</p>`+
@@ -555,9 +557,7 @@ function renderChanges(){
 }
 
 /* ---------- rank quiz (guess a card's rank within a chosen color) ---------- */
-// RATED is already sorted best->worst, so each filtered list is the ranking.
-const RANK_BY_COLOR = {};
-for(const col of ["W","U","B","R","G"]) RANK_BY_COLOR[col] = RATED.filter(c=>c.colors&&c.colors.includes(col));
+// RATED is sorted best->worst, so each per-color list (built in loadSet) is the ranking.
 const CDOT = {W:"#f3edc8",U:"#4a90d9",B:"#8a8a96",R:"#d9534f",G:"#4aaf5f"};
 const RARITY_WEIGHT = {common:9, uncommon:3, rare:0.9, mythic:0.18, special:0.5};
 const cardWeight = c => c.set==="MAR" ? 0.35 : (RARITY_WEIGHT[c.rarity] ?? 1);
@@ -656,7 +656,7 @@ function revealRank(inTopGuess, g){
       <div class="big" style="color:${bigc}">${big}</div>
       <div class="det">
         ${det}<br>
-        score <b style="color:${scoreHue(rankCard.score)}">${f1(rankCard.score)}</b>${rankCard.alsa!=null?` · ALSA ${rankCard.alsa.toFixed(1)}`:""}
+        score <b style="color:${scoreHue(rankCard.score)}">${f1(rankCard.score)}</b>${rankCard.alsa!=null?` · ALSA ${rankCard.alsa.toFixed(1)}`:""}${rankCard.ds_rating!=null?` · draftsim ${rankCard.ds_rating.toFixed(1)}`:""}
       </div>
       <button class="btn" id="ranknext" style="margin-top:16px">Next card ⚡</button>
     </div>`;
@@ -669,6 +669,7 @@ function renderRank(){ if(!rankColor) showRankPick(); }
 const VIEWS = {play:"playview", study:"studyview", signals:"signalsview", changes:"changesview", rank:"rankview"};
 function showView(which){
   if(!VIEWS[which]) which="play";
+  currentView=which;
   for(const k in VIEWS) $(VIEWS[k]).classList.toggle("hidden", k!==which);
   $("nav-play").classList.toggle("active",   which==="play");
   $("nav-study").classList.toggle("active",  which==="study");
@@ -680,22 +681,86 @@ function showView(which){
   if(which==="signals") renderSignals();
   if(which==="changes") renderChanges();
   if(which==="rank")    renderRank();
-  if(location.hash.slice(1)!==which) location.hash=which;   // deep-link / bookmarkable
+  const h = SET.toLowerCase()+"/"+which;                   // deep-link / bookmarkable
+  if(location.hash.slice(1)!==h) location.hash=h;
+}
+
+// "#hob/study" -> {set:"HOB", view:"study"}; legacy "#study" and "#hob" also work.
+function parseHash(){
+  const h=location.hash.slice(1).toLowerCase();
+  if(!h) return {set:null, view:null};
+  const [a,b]=h.split("/");
+  if(b!==undefined) return {set:a.toUpperCase(), view:b};
+  return VIEWS[a] ? {set:null, view:a} : {set:a.toUpperCase(), view:null};
+}
+
+/* ---------- set switching ---------- */
+function loadSet(code){
+  if(!ALL_SETS[code]) code=Object.keys(ALL_SETS)[0];
+  SET=code; DB=ALL_SETS[code];
+  const meta=SET_META[code]||SET_META.MSH, home=DB.set||code;
+  BOOSTER=meta.booster;
+  POOL={ common:[], commonLand:[], uncommon:[], rare:[], mythic:[], mar:[], basic:[] };
+  for (const c of DB.cards) {
+    if (c.is_basic)            POOL.basic.push(c);
+    else if (c.set !== home)   POOL.mar.push(c);   // bonus-sheet cards (MSH's Marvel Universe)
+    else if (c.rarity === "common") (c.is_land ? POOL.commonLand : POOL.common).push(c);
+    else if (POOL[c.rarity])   POOL[c.rarity].push(c);
+  }
+  RATED = DB.cards.filter(c=>c.score!=null).slice().sort((a,b)=>b.score-a.score);
+  RANK_BY_COLOR = {};
+  for(const col of ["W","U","B","R","G"]) RANK_BY_COLOR[col]=RATED.filter(c=>c.colors&&c.colors.includes(col));
+  const sig = DB.cards.filter(c=>c.pick_gap!=null && c.alsa!=null);
+  wheelsAll = sig.filter(c=>c.pick_gap>= GAP_MIN).sort((a,b)=>b.pick_gap-a.pick_gap);
+  trapsAll  = sig.filter(c=>c.pick_gap<=-GAP_MIN).sort((a,b)=>a.pick_gap-b.pick_gap);
+  WHEELS = wheelsAll.slice(0,SIG_CAP); TRAPS = trapsAll.slice(0,SIG_CAP);
+  CHANGES = DB.changes || [];
+  signalsBuilt = changesBuilt = false;
+  rankColor=null; rankCard=null;                    // reset the rank quiz
+  pack=[]; hide($("packwrap")); hide($("summary")); hide($("bar")); show($("start"));
+  document.documentElement.style.setProperty("--accent", meta.accent);
+  $("settitle").innerHTML = meta.title;
+  document.title = `${home} Draft Simulator — Rate the Pack`;
+  [...$("setnav").children].forEach(b=>b.classList.toggle("active", b.dataset.set===code));
+  const ds = DB.rating_source==="draftsim";
+  $("startblurb").innerHTML =
+    `A simulated ${home} Play Booster is dealt face-up. Type a rating from <b>1.0</b> (worst)
+     to <b>5.0</b> (bomb) for each card — decimals welcome, e.g. <b>3.5</b> — then hit
+     <b>Reveal</b> to see the true ratings (from ${ds?"draftsim's expert ratings":"real In-Hand Win Rates"}) and how close you were.`;
+  const pools =
+    `pools: ${POOL.common.length}C / ${POOL.uncommon.length}U / ${POOL.rare.length}R / ${POOL.mythic.length}M · `+
+    `${POOL.commonLand.length} dual + ${POOL.basic.length} basic lands`+
+    (POOL.mar.length?` · ${POOL.mar.length} Marvel`:"");
+  if(ds){
+    $("dataline").innerHTML =
+      `${DB.set_name||home}: ${DB.rated_count} of ${DB.card_count} cards rated · `+
+      `draftsim ratings ${DB.rating_min}–${DB.rating_max} · ${pools}`;
+    $("foot").innerHTML =
+      `Score = percentile rank of <a href="${DB.source}" target="_blank">draftsim</a>'s expert `+
+      `rating, mapped to 1–5. untapped.gg win rates (and the Signals view) take over automatically `+
+      `once the set has draft data — re-run <code>python3 fetch_cards.py --set ${code.toLowerCase()}</code> to refresh.`;
+  } else {
+    $("dataline").innerHTML =
+      `${DB.rated_count} of ${DB.card_count} cards rated · WR range `+
+      `${f1(DB.wr_min*100)}%–${f1(DB.wr_max*100)}% · min ${DB.min_games} games · ${pools}`;
+    $("foot").innerHTML =
+      `Score = percentile rank of in-hand WR, mapped to 1–5. Signals compare that `+
+      `to ALSA (pick order). Data from `+
+      `<a href="${DB.source}" target="_blank">untapped.gg</a>; re-run `+
+      `<code>python3 fetch_cards.py${code==="MSH"?"":" --set "+code.toLowerCase()}</code> to refresh as win rates drift.`;
+  }
+  try{ localStorage.setItem("trainer_set", code); }catch(e){}
 }
 
 function init(){
-  if(!DB||!DB.cards){$("dataline").textContent="Could not load cards.js — run fetch_cards.py first.";return;}
-  $("dataline").innerHTML =
-    `${DB.rated_count} of ${DB.card_count} cards rated · WR range `+
-    `${f1(DB.wr_min*100)}%–${f1(DB.wr_max*100)}% · min ${DB.min_games} games · pools: `+
-    `${POOL.common.length}C / ${POOL.uncommon.length}U / ${POOL.rare.length}R / ${POOL.mythic.length}M · `+
-    `${POOL.commonLand.length} dual + ${POOL.basic.length} basic lands · ${POOL.mar.length} Marvel`;
-  $("foot").innerHTML =
-    `Score = percentile rank of in-hand WR, mapped to 1–5. Signals compare that `+
-    `to ALSA (pick order). Data from `+
-    `<a href="${DB.source}" target="_blank">untapped.gg</a>; re-run `+
-    `<code>python3 fetch_cards.py</code> to refresh as win rates drift.`;
-  show($("start"));
+  const codes=Object.keys(ALL_SETS);
+  if(!codes.length){$("dataline").textContent="Could not load cards.js — run fetch_cards.py first.";return;}
+  $("setnav").innerHTML = codes.map(c=>`<button class="navbtn" data-set="${c}">${c}</button>`).join("");
+  $("setnav").addEventListener("click",e=>{
+    const b=e.target.closest(".navbtn");
+    if(!b||b.dataset.set===SET) return;
+    loadSet(b.dataset.set); showView(currentView);
+  });
   $("open1").onclick=startPack;
   $("reveal").onclick=reveal;
   $("newpack").onclick=startPack;
@@ -721,9 +786,16 @@ function init(){
   $("nav-rank").onclick=()=>showView("rank");
   $("rankcolors").addEventListener("click",e=>{const b=e.target.closest(".fbtn");if(b)startRankColor(b.dataset.c);});
   $("rankchange").onclick=showRankPick;
-  window.addEventListener("hashchange",()=>showView(location.hash.slice(1)));
-  const startView=location.hash.slice(1);
-  if(VIEWS[startView]&&startView!=="play") showView(startView);
+  window.addEventListener("hashchange",()=>{
+    const {set,view}=parseHash();
+    if(set && ALL_SETS[set] && set!==SET) loadSet(set);
+    showView(view||currentView);
+  });
+  // initial set: URL hash > last used (localStorage) > MSH > whatever loaded
+  const {set,view}=parseHash();
+  let saved=null; try{ saved=localStorage.getItem("trainer_set"); }catch(e){}
+  loadSet((set&&ALL_SETS[set]&&set) || (saved&&ALL_SETS[saved]&&saved) || (ALL_SETS.MSH?"MSH":codes[0]));
+  showView(view||"play");
   $("studysearch").addEventListener("input",renderStudy);
   $("studyfilters").addEventListener("click",e=>{
     const b=e.target.closest(".fbtn"); if(!b)return;

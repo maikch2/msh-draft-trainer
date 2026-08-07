@@ -1,44 +1,74 @@
 #!/usr/bin/env python3
 """
-Download Marvel Super Heroes (MSH) limited draft card data from untapped.gg,
-compute each card's In-Hand Win Rate, and turn that into a 1-5 score.
+Download limited draft card data for a set, compute each card's rating, and
+turn that into a 1-5 score.
 
-Output: cards.json  (consumed by the draft simulator in index.html)
+Output: cards.json / cards_hob.json  (consumed by the simulator in index.html)
 
-The score is the *percentile rank* of in-hand WR across every *rated* card,
-mapped onto a 1-5 scale:
+Two data sources, tried in order (--source auto):
 
-    score = 1 + 4 * percentile_rank(WR)
+  1. untapped.gg  — real In-Hand Win Rates + ALSA/ATA pick data. Preferred.
+  2. draftsim.com — expert 0-5 ratings from their pick-order page. Used as a
+     fallback for brand-new sets that have no untapped stats yet (the fallback
+     disappears on its own once untapped starts publishing data for the set).
 
-so the worst in-hand WR -> 1.0, the best -> 5.0, and the median -> ~3.0.
-Ranking (rather than a linear min-max stretch of the raw WR) spreads the
-bell-shaped middle of the pack out into meaningful tiers.
+Whatever the source, the score is the *percentile rank* of the rating metric
+(in-hand WR, or the draftsim rating) across every *rated* card, mapped onto a
+1-5 scale:
 
-A card is "rated" only if it has at least --min-games total games played
-(default 500); brand-new sets have noisy low-sample cards. Unrated cards
-(and the basic-land / no-data cards) are still written out with score=null
-so the simulator can show them but skip them when scoring your guesses.
+    score = 1 + 4 * percentile_rank(metric)
 
-Run again any time -- the win rates drift as more games are played.
+so the worst card -> 1.0, the best -> 5.0, and the median -> ~3.0. Ranking
+(rather than a linear min-max stretch) spreads the bell-shaped middle of the
+pack out into meaningful tiers, and keeps the game consistent across sources.
 
-    python3 fetch_cards.py                 # download + images
-    python3 fetch_cards.py --no-images     # skip Scryfall image lookup
+With untapped data, a card is "rated" only if it has at least --min-games
+total games played (default 500); brand-new sets have noisy low-sample cards.
+Unrated cards (and the basic-land / no-data cards) are still written out with
+score=null so the simulator can show them but skip them when scoring.
+
+Run again any time -- win rates drift as more games are played.
+
+    python3 fetch_cards.py                     # MSH: download + images
+    python3 fetch_cards.py --set hob           # The Hobbit -> cards_hob.json
+    python3 fetch_cards.py --no-images         # skip Scryfall image lookup
     python3 fetch_cards.py --min-games 300
 """
 import argparse
+import csv
 import datetime
 import hashlib
+import io
 import json
 import re
 import sys
 import urllib.request
 
-PAGE_URL = "https://mtga.untapped.gg/limited/draft/marvel-super-heroes/card-data"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (draft-bot)"
+
+# Per-set configuration. `extra_scry_sets` are bonus-sheet sets whose cards can
+# appear in this set's boosters (e.g. MSH's Marvel Universe "MAR" cards).
+SETS = {
+    "msh": {
+        "code": "MSH",
+        "name": "Marvel Super Heroes",
+        "untapped_slug": "marvel-super-heroes",
+        "out": "cards.json",          # historical name, kept so old links work
+    },
+    "hob": {
+        "code": "HOB",
+        "name": "The Hobbit",
+        "untapped_slug": "the-hobbit",
+        "out": "cards_hob.json",
+    },
+}
 
 # untapped rarity enum  ->  human label
 RARITY = {2: "common", 3: "uncommon", 4: "rare", 5: "mythic"}
+# draftsim rarity letter -> human label
+DS_RARITY = {"C": "common", "U": "uncommon", "R": "rare", "M": "mythic"}
 COLORS = {"W": "W", "U": "U", "B": "B", "R": "R", "G": "G"}
+BASIC_NAMES = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
 
 
 def fetch(url):
@@ -49,10 +79,17 @@ def fetch(url):
         return r.read().decode("utf-8")
 
 
+# ==========================================================================
+# Source 1: untapped.gg  (in-hand win rates + ALSA/ATA)
+# ==========================================================================
+def untapped_url(cfg):
+    return f"https://mtga.untapped.gg/limited/draft/{cfg['untapped_slug']}/card-data"
+
+
 def parse_next_data(html):
     m = re.search(r'id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
     if not m:
-        sys.exit("Could not find __NEXT_DATA__ in the page (layout changed?).")
+        return None
     return json.loads(m.group(1))
 
 
@@ -113,7 +150,7 @@ def draft_pick_stats(data):
     return out
 
 
-def build_cards(data):
+def build_cards_untapped(data):
     ssr = data["props"]["pageProps"]["ssrProps"]
     mj = ssr["minifiedMtgaJsonData"]
     id2name = {row[0]: row[1] for row in mj["localeData"]}
@@ -143,6 +180,7 @@ def build_cards(data):
             "total_games": total,
             "games": games,
             "win_rate": round(wr, 4) if wr is not None else None,
+            "ds_rating": None,
             "alsa": round(ps["alsa"], 2) if ps.get("alsa") is not None else None,
             "ata": round(ps["ata"], 2) if ps.get("ata") is not None else None,
             "is_land": False,
@@ -151,43 +189,114 @@ def build_cards(data):
     return cards
 
 
-def score_cards(cards, min_games):
-    """Score each rated card 1..5 by its *percentile rank* of in-hand WR.
+def try_untapped(cfg):
+    """Return (cards, source_url) from untapped, or (None, url) if no data yet."""
+    url = untapped_url(cfg)
+    print(f"Downloading {url} ...")
+    try:
+        html = fetch(url)
+    except Exception as e:
+        print(f"  untapped fetch failed ({e})")
+        return None, url
+    data = parse_next_data(html)
+    ssr = data and data.get("props", {}).get("pageProps", {}).get("ssrProps")
+    stats = ssr and (ssr.get("limitedCardStatsResp") or {}).get("data", {}).get("data")
+    if not stats:
+        print("  untapped has no card stats for this set yet.")
+        return None, url
+    return build_cards_untapped(data), url
 
-    Raw WR is roughly bell-shaped, so a linear min-max stretch piles most cards
-    into the middle. Ranking by percentile instead spreads the pack evenly: the
-    worst WR -> 1.0, the best -> 5.0, the median -> ~3.0. Tied WRs share the
-    average rank, so equal cards get equal scores.
+
+# ==========================================================================
+# Source 2: draftsim.com  (expert 0-5 ratings; fallback for unreleased sets)
+# ==========================================================================
+def draftsim_url(cfg):
+    return f"https://draftsim.com/{cfg['code']}-pick-order/"
+
+
+def parse_ds_cost(cost):
+    """'1W' -> {'text': '{1}{W}', 'colors': ['W'], 'mv': 2}; 'none'/'' -> empty."""
+    if not cost or cost.lower() == "none":
+        return {"text": "", "colors": [], "mv": None}
+    pips = re.findall(r"\d+|[A-Za-z]", cost)
+    colors = sorted({COLORS[p.upper()] for p in pips if p.upper() in COLORS})
+    mv = sum(int(p) if p.isdigit() else 1 for p in pips if p.upper() != "X")
+    return {"text": "".join("{%s}" % p.upper() for p in pips), "colors": colors, "mv": mv}
+
+
+def fetch_draftsim_tsv(cfg):
+    """Scrape the set's ratings TSV out of draftsim's draft-app JS bundle.
+
+    The pick-order page loads a Vite bundle (/draft-app/dist/assets/index-*.js)
+    which inlines each set's ratings file as a template literal, keyed by a
+    '../data/<SET>.txt' import map. Bundle hash changes per deploy, so we
+    always discover it from the page.
     """
-    rated = [c for c in cards if c["win_rate"] is not None and c["total_games"] >= min_games]
-    n = len(rated)
-    wrs = [c["win_rate"] for c in rated]
-    lo, hi = (min(wrs), max(wrs)) if rated else (0.0, 0.0)
-
-    # average 0-based rank per distinct WR -> percentile in [0,1] -> score in [1,5]
-    by_wr = sorted(rated, key=lambda c: c["win_rate"])
-    pct = {}
-    i = 0
-    while i < n:
-        j = i
-        while j < n and by_wr[j]["win_rate"] == by_wr[i]["win_rate"]:
-            j += 1
-        avg_rank = (i + j - 1) / 2          # mean of tied positions
-        p = avg_rank / (n - 1) if n > 1 else 0.0
-        pct[by_wr[i]["win_rate"]] = p
-        i = j
-
-    for c in cards:
-        if c in rated:
-            s = 1 + 4 * pct[c["win_rate"]]
-            c["score"] = round(s, 2)
-            c["tier"] = round(s)          # nearest integer 1..5, for guessing
-        else:
-            c["score"] = None
-            c["tier"] = None
-    return lo, hi, n
+    page_url = draftsim_url(cfg)
+    print(f"Downloading {page_url} ...")
+    html = fetch(page_url)
+    m = re.search(r'src="([^"]*/draft-app/dist/assets/index-[^"]+\.js)"', html)
+    if not m:
+        sys.exit("Could not find the draftsim draft-app bundle on the page (layout changed?).")
+    bundle_url = m.group(1)
+    if bundle_url.startswith("/"):
+        bundle_url = "https://draftsim.com" + bundle_url
+    print(f"  bundle: {bundle_url}")
+    js = fetch(bundle_url)
+    m = re.search(r'"\.\./data/%s\.txt":([A-Za-z_$][\w$]*)' % cfg["code"], js)
+    if not m:
+        sys.exit(f"No ../data/{cfg['code']}.txt entry in the draftsim bundle — "
+                 "draftsim has no ratings for this set yet.")
+    var = m.group(1)
+    m = re.search(r'\b%s=`(.*?)`' % re.escape(var), js, re.S)
+    if not m:
+        sys.exit(f"Could not extract the {cfg['code']} ratings literal from the bundle.")
+    return m.group(1), page_url
 
 
+def build_cards_draftsim(tsv, cfg):
+    """TSV columns: Name Name_2 Casting_Cost_1 Casting_Cost_2 Card_Type Rarity
+    Rating List Archetype Fixing Splashable. Rating is 0-5; basics get -1.
+    Basic lands are skipped here (added later from Scryfall, like untapped)."""
+    cards = []
+    for row in csv.DictReader(io.StringIO(tsv), delimiter="\t"):
+        name = (row.get("Name") or "").replace("_", " ").strip()
+        if not name or name in BASIC_NAMES:
+            continue
+        name2 = (row.get("Name_2") or "").replace("_", " ").strip()
+        if name2 and name2.lower() != "none":
+            name = f"{name} // {name2}"
+        c1 = parse_ds_cost(row.get("Casting_Cost_1", ""))
+        c2 = parse_ds_cost(row.get("Casting_Cost_2", ""))
+        try:
+            rating = float(row.get("Rating", ""))
+        except ValueError:
+            rating = None
+        if rating is not None and rating < 0:      # draftsim marks basics -1
+            rating = None
+        cards.append({
+            "id": f"ds-{cfg['code']}-{name}",
+            "name": name,
+            "set": cfg["code"],
+            "rarity": DS_RARITY.get(row.get("Rarity", ""), "special"),
+            "mana_value": c1["mv"],
+            "cost": c1["text"],
+            "colors": sorted(set(c1["colors"]) | set(c2["colors"])),
+            "total_games": 0,
+            "games": 0,
+            "win_rate": None,
+            "ds_rating": rating,
+            "alsa": None,
+            "ata": None,
+            "is_land": row.get("Card_Type") == "Land",
+            "is_basic": False,
+        })
+    return cards
+
+
+# ==========================================================================
+# Scoring (source-agnostic): percentile rank of a metric -> 1..5
+# ==========================================================================
 def _percentile_by(items, value_fn):
     """{id(item): percentile in [0,1]} ranking items by value_fn (ties share rank)."""
     items = sorted(items, key=value_fn)
@@ -203,6 +312,31 @@ def _percentile_by(items, value_fn):
             out[id(items[k])] = p
         i = j
     return out
+
+
+def score_cards(cards, metric, min_games=0):
+    """Score each rated card 1..5 by its *percentile rank* of `metric`.
+
+    Raw metrics are roughly bell-shaped, so a linear min-max stretch piles most
+    cards into the middle. Ranking by percentile instead spreads the pack
+    evenly: the worst -> 1.0, the best -> 5.0, the median -> ~3.0. Tied values
+    share the average rank, so equal cards get equal scores.
+    """
+    rated = [c for c in cards
+             if c[metric] is not None and c["total_games"] >= min_games]
+    vals = [c[metric] for c in rated]
+    lo, hi = (min(vals), max(vals)) if rated else (0.0, 0.0)
+    pct = _percentile_by(rated, lambda c: c[metric])
+    rated_ids = {id(c) for c in rated}
+    for c in cards:
+        if id(c) in rated_ids:
+            s = 1 + 4 * pct[id(c)]
+            c["score"] = round(s, 2)
+            c["tier"] = round(s)          # nearest integer 1..5, for guessing
+        else:
+            c["score"] = None
+            c["tier"] = None
+    return lo, hi, len(rated)
 
 
 def tag_pick_signals(cards):
@@ -304,10 +438,13 @@ def attach_images(cards):
         info = cache[sc].get(c["name"]) or cache[sc].get(c["name"].split(",")[0])
         c["image"] = info.get("image") if info else None
         c["image_small"] = info.get("image_small") if info else None
-        c["is_land"] = bool(info and info.get("is_land"))
+        c["is_land"] = bool(info and info.get("is_land")) or c.get("is_land", False)
         c["is_basic"] = bool(info and info.get("is_basic"))
         matched += bool(info)
+    misses = [c["name"] for c in cards if not c.get("image")]
     print(f"  matched images for {matched}/{len(cards)} cards")
+    if misses:
+        print(f"  no image for: {', '.join(misses[:10])}{' …' if len(misses) > 10 else ''}")
     return cache
 
 
@@ -322,7 +459,8 @@ def basic_lands_from(cache, set_code):
         out.append({
             "id": f"basic-{set_code}-{name}", "name": name, "set": set_code.upper(),
             "rarity": "basic", "mana_value": None, "cost": "", "colors": [],
-            "total_games": 0, "games": 0, "win_rate": None, "score": None, "tier": None,
+            "total_games": 0, "games": 0, "win_rate": None, "ds_rating": None,
+            "score": None, "tier": None,
             "alsa": None, "ata": None, "pick_gap": None,
             "is_land": True, "is_basic": True,
             "image": e.get("image"), "image_small": e.get("image_small"),
@@ -332,22 +470,44 @@ def basic_lands_from(cache, set_code):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--set", default="msh", choices=sorted(SETS),
+                    help="which set to fetch (default msh)")
+    ap.add_argument("--source", default="auto",
+                    choices=["auto", "untapped", "draftsim"],
+                    help="auto = untapped first, draftsim fallback (default)")
     ap.add_argument("--min-games", type=int, default=500,
                     help="min total games played for a card to be ranked (default 500)")
     ap.add_argument("--no-images", action="store_true",
                     help="don't fetch card images from Scryfall")
-    ap.add_argument("--out", default="cards.json")
+    ap.add_argument("--out", default=None,
+                    help="output file (default per set: cards.json / cards_hob.json)")
     args = ap.parse_args()
 
-    print(f"Downloading {PAGE_URL} ...")
-    html = fetch(PAGE_URL)
-    data = parse_next_data(html)
-    cards = build_cards(data)
-    print(f"Parsed {len(cards)} cards with stats.")
+    cfg = SETS[args.set]
+    out = args.out or cfg["out"]
 
-    lo, hi, n = score_cards(cards, args.min_games)
-    print(f"Rated {n} cards (>= {args.min_games} total games). "
-          f"WR range: {lo*100:.1f}% -> {hi*100:.1f}%")
+    cards = None
+    source = None
+    src_url = untapped_url(cfg)
+    if args.source in ("auto", "untapped"):
+        cards, src_url = try_untapped(cfg)
+        if cards:
+            source = "untapped"
+        elif args.source == "untapped":
+            sys.exit("No untapped data (yet) — try --source auto/draftsim.")
+    if cards is None:
+        tsv, src_url = fetch_draftsim_tsv(cfg)
+        cards = build_cards_draftsim(tsv, cfg)
+        source = "draftsim"
+    print(f"Parsed {len(cards)} cards from {source}.")
+
+    if source == "untapped":
+        lo, hi, n = score_cards(cards, "win_rate", args.min_games)
+        print(f"Rated {n} cards (>= {args.min_games} total games). "
+              f"WR range: {lo*100:.1f}% -> {hi*100:.1f}%")
+    else:
+        lo, hi, n = score_cards(cards, "ds_rating")
+        print(f"Rated {n} cards. draftsim rating range: {lo:.1f} -> {hi:.1f}")
 
     sig = tag_pick_signals(cards)
     print(f"Tagged pick signals (power vs ALSA) for {sig} cards.")
@@ -355,47 +515,58 @@ def main():
     if not args.no_images:
         print("Fetching card images from Scryfall ...")
         cache = attach_images(cards)
-        basics = basic_lands_from(cache, "MSH")
+        basics = basic_lands_from(cache, cfg["code"])
         cards.extend(basics)
         print(f"  added {len(basics)} basic lands: {', '.join(b['name'] for b in basics)}")
 
     cards.sort(key=lambda c: (c["score"] is None, -(c["score"] or 0)))
 
-    # Compare against the previous cards.json (still on disk) before we clobber it.
-    changes, since = diff_report(cards, args.out)
+    # Compare against the previous output (still on disk) before we clobber it.
+    changes, since = diff_report(cards, out)
     if changes:
         print(f"Top {len(changes)} score movers"
-              + (f" since {since}." if since else " vs previous cards.json."))
+              + (f" since {since}." if since else " vs previous data."))
     else:
-        print("No previous cards.json to diff against (first run).")
+        print("No previous data to diff against (first run or source switch).")
 
     payload = {
-        "source": PAGE_URL,
+        "set": cfg["code"],
+        "set_name": cfg["name"],
+        "rating_source": source,
+        "source": src_url,
         "generated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "min_games": args.min_games,
-        "wr_min": round(lo, 4),
-        "wr_max": round(hi, 4),
+        "min_games": args.min_games if source == "untapped" else None,
+        "wr_min": round(lo, 4) if source == "untapped" else None,
+        "wr_max": round(hi, 4) if source == "untapped" else None,
+        "rating_min": round(lo, 2) if source == "draftsim" else None,
+        "rating_max": round(hi, 2) if source == "draftsim" else None,
         "rated_count": n,
         "card_count": len(cards),
         "changes_since": since,
         "changes": changes,
         "cards": cards,
     }
-    with open(args.out, "w") as f:
+    with open(out, "w") as f:
         json.dump(payload, f, indent=1, ensure_ascii=False)
-    print(f"Wrote {args.out}  ({len(cards)} cards).")
+    print(f"Wrote {out}  ({len(cards)} cards).")
 
     # Also emit a JS wrapper so index.html works when opened directly
     # via file:// (where fetch() of a local .json is blocked by the browser).
-    js_out = args.out.rsplit(".", 1)[0] + ".js"
-    js_body = "window.__CARDS__ = " + json.dumps(payload, ensure_ascii=False) + ";\n"
+    # Each set registers itself under window.__CARDS_BY_SET__; the MSH file
+    # also keeps the legacy window.__CARDS__ global.
+    js_out = out.rsplit(".", 1)[0] + ".js"
+    js_body = ("window.__CARDS_BY_SET__ = window.__CARDS_BY_SET__ || {};\n"
+               f"window.__CARDS_BY_SET__[{json.dumps(cfg['code'])}] = "
+               + json.dumps(payload, ensure_ascii=False) + ";\n")
+    if args.set == "msh":
+        js_body += f"window.__CARDS__ = window.__CARDS_BY_SET__[{json.dumps(cfg['code'])}];\n"
     with open(js_out, "w") as f:
         f.write(js_body)
     print(f"Wrote {js_out} (open index.html directly, no server needed).")
 
-    # Bump the cache-busting ?v= on the cards.js <script> tag in index.html to a
-    # content hash, so browsers (esp. iOS Safari) and GitHub Pages' CDN fetch the
-    # fresh file instead of serving a stale cached copy.
+    # Bump the cache-busting ?v= on this set's <script> tag in index.html to a
+    # content hash, so browsers (esp. iOS Safari) and GitHub Pages' CDN fetch
+    # the fresh file instead of serving a stale cached copy.
     bump_cache_version(js_out, js_body)
 
 
