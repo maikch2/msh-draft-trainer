@@ -361,19 +361,17 @@ def tag_pick_signals(cards):
     return len(rated)
 
 
-def diff_report(cards, old_path, top=25):
+def diff_report(cards, old, top=25):
     """(rows, since): the top-N cards whose score moved most since last run.
 
-    Reads the *previous* output file (call this BEFORE overwriting it) and
-    compares scores by card id. Cards that just entered or left the rated set
-    (old or new score is None) are skipped -- their "change" is an artifact of
-    the games-played threshold, not a real power shift. Sorted by |diff| desc.
+    `old` is the previously-written payload dict (read it BEFORE overwriting
+    the file), or None. Compares scores by card id. Cards that just entered or
+    left the rated set (old or new score is None) are skipped -- their "change"
+    is an artifact of the games-played threshold, not a real power shift.
+    Sorted by |diff| desc.
     """
-    try:
-        with open(old_path) as f:
-            old = json.load(f)
-    except (OSError, ValueError):
-        return [], None                      # no/unreadable previous file
+    if not old:
+        return [], None
     prev = {c["id"]: c.get("score") for c in old.get("cards", [])}
     rows = []
     for c in cards:
@@ -522,10 +520,23 @@ def main():
     cards.sort(key=lambda c: (c["score"] is None, -(c["score"] or 0)))
 
     # Compare against the previous output (still on disk) before we clobber it.
-    changes, since = diff_report(cards, out)
+    try:
+        with open(out) as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        old = None
+    changes, since = diff_report(cards, old)
     if changes:
         print(f"Top {len(changes)} score movers"
               + (f" since {since}." if since else " vs previous data."))
+    elif old and old.get("rating_source") == source and old.get("changes"):
+        # Re-fetched the same untapped batch (untapped recomputes ~daily, so a
+        # second run the same day sees zero movement). Wiping the movers list
+        # here is what the site would show -- keep the previous list instead;
+        # it is still "the moves since <changes_since>".
+        changes, since = old["changes"], old.get("changes_since")
+        print(f"No score movement since last run; keeping previous movers list"
+              + (f" (since {since})." if since else "."))
     else:
         print("No previous data to diff against (first run or source switch).")
 
