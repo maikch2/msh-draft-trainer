@@ -521,7 +521,7 @@ function renderStudy(){
     }).join("");
 }
 /* ---------- signals view (wheels / traps) ---------- */
-const GAP_MIN = 0.40, SIG_CAP = 15;   // |gap| threshold and max rows per list
+const GAP_MIN = 0.30, SIG_CAP = 25;   // |gap| threshold and max rows per list
 function sigRows(list){
   if(!list.length) return `<p class="scount">No cards meet the threshold.</p>`;
   return list.map((c,i)=>{
