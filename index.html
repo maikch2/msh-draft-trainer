@@ -166,6 +166,7 @@
     <nav class="nav" id="setnav" title="Switch set"></nav>
     <nav class="nav">
       <button class="navbtn active" id="nav-play">🎴 Play</button>
+      <button class="navbtn" id="nav-drill">⚡ Drill</button>
       <button class="navbtn" id="nav-study">📋 Study list</button>
       <button class="navbtn" id="nav-signals">🎯 Signals</button>
       <button class="navbtn" id="nav-changes">📈 Changes</button>
@@ -195,6 +196,15 @@
   <!-- SUMMARY -->
   <div id="summary" class="panel hidden" style="margin-bottom:18px"></div>
  </div><!-- /playview -->
+
+  <!-- DRILL (one card at a time; misses come back more often) -->
+  <div id="drillview" class="hidden">
+    <div class="rankbar">
+      <span id="drillinfo"></span>
+      <button class="btn ghost" id="drillreset">Reset memory</button>
+    </div>
+    <div id="drillcardwrap"></div>
+  </div>
 
   <!-- STUDY LIST -->
   <div id="studyview" class="hidden">
@@ -245,8 +255,8 @@
     <div id="rankpick" class="panel center">
       <h2>Guess a card's rank within a color</h2>
       <p class="sub" style="margin:8px auto 18px;max-width:560px">
-        Pick a color. For each card, decide whether it's a <b>top-25</b> card in that color —
-        if so, guess its exact rank (<b>1 = best</b>); if not, hit <b>“Not in top 25”</b>.
+        Pick a color. For each card, decide whether it's in the <b>top 35%</b> of that color —
+        if so, guess its exact rank (<b>1 = best</b>); if not, hit <b>“Not in top N”</b>.
         Rarer cards appear less often, commons more.
       </p>
       <div class="filters" style="justify-content:center" id="rankcolors"></div>
@@ -431,6 +441,7 @@ function reveal(){
     }
     let g=Math.max(1,Math.min(5,parseFloat(raw)));
     const err=Math.abs(g-c.score); errSum+=err; n++;
+    recordErr(c, err);            // feed the Drill view's mistake memory
     const v=verdict(err);
     cardEl.classList.add(v.cls);
     body.insertAdjacentHTML("beforeend",
@@ -575,13 +586,96 @@ function renderChanges(){
   changesBuilt=true;
 }
 
+/* ---------- drill (one card at a time, mistake-weighted) ----------
+   Each rated card is drawn with probability ∝ its rarity weight (how often
+   you'd actually face it in a draft) × a mistake multiplier from a per-card
+   error EMA persisted in localStorage (per set). The EMA is updated every
+   time you rate the card — here or in Play — so cards you keep misjudging
+   come back more often, and ones you nail fade out. */
+let drillErr={}, drillCard=null, drillRevealed=false;
+const drillStats={n:0, errSum:0};
+const drillKey = () => "drill_err_"+SET;
+function loadDrillErr(){ try{ drillErr=JSON.parse(localStorage.getItem(drillKey()))||{}; }catch(e){ drillErr={}; } }
+function saveDrillErr(){ try{ localStorage.setItem(drillKey(), JSON.stringify(drillErr)); }catch(e){} }
+function recordErr(c, err){
+  const e=drillErr[c.id];    // [errEMA, timesRated]
+  drillErr[c.id] = e ? [Math.round((0.6*e[0]+0.4*err)*100)/100, e[1]+1]
+                     : [Math.round(err*100)/100, 1];
+  saveDrillErr();
+}
+// never-rated cards get a slight priority (1.25×); rated ones scale with
+// their error EMA — nailed cards fade to 0.5×, badly missed ones up to 7×.
+function missMult(c){
+  const e=drillErr[c.id];
+  return e ? Math.min(7, 0.5 + 1.6*e[0]) : 1.25;
+}
+function updateDrillInfo(){
+  const seen=RATED.filter(c=>drillErr[c.id]).length;
+  const avg=drillStats.n?drillStats.errSum/drillStats.n:null;
+  $("drillinfo").innerHTML =
+    `<b style="color:var(--ink)">${RATED.length}</b> rated cards · memory on ${seen}`+
+    ` · session: ${drillStats.n} rated`+(avg!=null?` · avg error <b style="color:var(--ink)">${f1(avg)}</b>`:"");
+}
+function nextDrillCard(){
+  drillCard = weightedPick(RATED, drillCard, c=>cardWeight(c)*missMult(c));
+  drillRevealed=false;
+  const c=drillCard, th=c.image||c.image_small;
+  $("drillcardwrap").innerHTML = `
+    <div class="rankcard panel">
+      ${th?`<img class="rankart" src="${th}" alt="${c.name}">`:`<div class="rankart" style="height:330px"></div>`}
+      <div class="rankname">${c.name}</div>
+      <div class="rankmeta ${rarityClass(c)}">${rarityLabel(c)}${c.cost?` · ${c.cost}`:""}</div>
+      <div class="rankguess" id="drillguess">
+        <label>Your rating (1.0–5.0)</label>
+        <input type="text" inputmode="decimal" id="drillinput" placeholder="1–5" autocomplete="off">
+        <div class="rankbtns"><button class="btn" id="drillrevealbtn">Reveal ▸</button></div>
+      </div>
+    </div>`;
+  const inp=$("drillinput");
+  inp.addEventListener("input",e=>{const cl=e.target.value.replace(/,/g,".").replace(/[^0-9.]/g,"");if(cl!==e.target.value)e.target.value=cl;});
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();drillReveal();}});
+  $("drillrevealbtn").onclick=drillReveal;
+  inp.focus();
+  updateDrillInfo();
+}
+function drillReveal(){
+  if(drillRevealed) return;
+  const raw=$("drillinput").value.trim().replace(",",".");
+  if(raw===""){ $("drillinput").focus(); return; }
+  drillRevealed=true;
+  const c=drillCard, g=Math.max(1,Math.min(5,parseFloat(raw)||1));
+  const err=Math.abs(g-c.score), v=verdict(err);
+  drillStats.n++; drillStats.errSum+=err;
+  S.scored++; S.errSum+=err; updateStats();
+  const prev=drillErr[c.id];                 // history BEFORE this guess
+  recordErr(c, err);
+  const col = v.cls==="ok"?"var(--good)":v.cls==="mid"?"var(--accent2)":"var(--bad)";
+  $("drillguess").outerHTML = `
+    <div class="rankresult">
+      <div class="big" style="color:${col}">${v.txt} off by ${f1(err)}</div>
+      <div class="det">
+        you <b style="color:var(--ink)">${f1(g)}</b> · true <b style="color:${scoreHue(c.score)}">${f1(c.score)}</b>
+        ${c.alsa!=null?` · ALSA ${c.alsa.toFixed(1)}`:""}<br>
+        ${prev?`seen ${prev[1]}× before · your error trend ${f1(prev[0])}`:"first time rating this card"}
+      </div>
+      <button class="btn" id="drillnext" style="margin-top:16px">Next card ⚡</button>
+    </div>`;
+  $("drillnext").onclick=nextDrillCard;
+  $("drillnext").focus();
+  updateDrillInfo();
+}
+function renderDrill(){
+  if(!RATED.length){ $("drillcardwrap").innerHTML=`<p class="scount">No rated cards in this set yet.</p>`; return; }
+  if(!drillCard) nextDrillCard(); else updateDrillInfo();
+}
+
 /* ---------- rank quiz (guess a card's rank within a chosen color) ---------- */
 // RATED is sorted best->worst, so each per-color list (built in loadSet) is the ranking.
 const CDOT = {W:"#f3edc8",U:"#4a90d9",B:"#8a8a96",R:"#d9534f",G:"#4aaf5f"};
 const RARITY_WEIGHT = {common:9, uncommon:3, rare:0.9, mythic:0.18, special:0.5};
 const cardWeight = c => c.set==="MAR" ? 0.35 : (RARITY_WEIGHT[c.rarity] ?? 1);
-function weightedPick(arr, exclude){
-  const w = arr.map(c => c===exclude ? 0 : cardWeight(c));
+function weightedPick(arr, exclude, wfn=cardWeight){
+  const w = arr.map(c => c===exclude ? 0 : wfn(c));
   let total = w.reduce((a,b)=>a+b,0);
   if(total<=0) return arr[Math.floor(Math.random()*arr.length)];
   let r = Math.random()*total;
@@ -592,12 +686,16 @@ function weightedPick(arr, exclude){
 let rankColor=null, rankCard=null, rankRevealed=false;
 const rankStats={n:0, hits:0, rankErrSum:0, rankErrN:0};
 const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
-const rankTop = () => Math.min(25, RANK_BY_COLOR[rankColor].length);
+// The "in the top?" cutoff is a fixed share of the color's rated cards, so
+// it means the same thing in a 250-card set and a 130-card one.
+const RANK_TOP_FRAC = 0.35;
+const rankTopOf = n => Math.max(1, Math.round(n*RANK_TOP_FRAC));
+const rankTop = () => rankTopOf(RANK_BY_COLOR[rankColor].length);
 
 function showRankPick(){
   rankColor=null;
   $("rankcolors").innerHTML = ["W","U","B","R","G"].map(col=>
-    `<button class="fbtn" data-c="${col}"><span class="cdot" style="background:${CDOT[col]}"></span>${cap(COLORNAME[col])} (${RANK_BY_COLOR[col].length})</button>`
+    `<button class="fbtn" data-c="${col}"><span class="cdot" style="background:${CDOT[col]}"></span>${cap(COLORNAME[col])} (${RANK_BY_COLOR[col].length} · top ${rankTopOf(RANK_BY_COLOR[col].length)})</button>`
   ).join("");
   $("rankpick").classList.remove("hidden");
   $("rankquiz").classList.add("hidden");
@@ -685,17 +783,19 @@ function revealRank(inTopGuess, g){
 }
 function renderRank(){ if(!rankColor) showRankPick(); }
 
-const VIEWS = {play:"playview", study:"studyview", signals:"signalsview", changes:"changesview", rank:"rankview"};
+const VIEWS = {play:"playview", drill:"drillview", study:"studyview", signals:"signalsview", changes:"changesview", rank:"rankview"};
 function showView(which){
   if(!VIEWS[which]) which="play";
   currentView=which;
   for(const k in VIEWS) $(VIEWS[k]).classList.toggle("hidden", k!==which);
   $("nav-play").classList.toggle("active",   which==="play");
+  $("nav-drill").classList.toggle("active",  which==="drill");
   $("nav-study").classList.toggle("active",  which==="study");
   $("nav-signals").classList.toggle("active",which==="signals");
   $("nav-changes").classList.toggle("active",which==="changes");
   $("nav-rank").classList.toggle("active",   which==="rank");
   $("bar").classList.toggle("hidden", which!=="play" || $("packwrap").classList.contains("hidden"));
+  if(which==="drill")   renderDrill();
   if(which==="study")   renderStudy();
   if(which==="signals") renderSignals();
   if(which==="changes") renderChanges();
@@ -736,6 +836,8 @@ function loadSet(code){
   CHANGES = DB.changes || [];
   signalsBuilt = changesBuilt = false;
   rankColor=null; rankCard=null;                    // reset the rank quiz
+  loadDrillErr(); drillCard=null;                   // reload this set's drill memory
+  drillStats.n=0; drillStats.errSum=0;
   pack=[]; hide($("packwrap")); hide($("summary")); hide($("bar")); show($("start"));
   document.documentElement.style.setProperty("--accent", meta.accent);
   $("settitle").innerHTML = meta.title;
@@ -799,12 +901,17 @@ function init(){
   });
   // nav + study controls
   $("nav-play").onclick=()=>showView("play");
+  $("nav-drill").onclick=()=>showView("drill");
   $("nav-study").onclick=()=>showView("study");
   $("nav-signals").onclick=()=>showView("signals");
   $("nav-changes").onclick=()=>showView("changes");
   $("nav-rank").onclick=()=>showView("rank");
   $("rankcolors").addEventListener("click",e=>{const b=e.target.closest(".fbtn");if(b)startRankColor(b.dataset.c);});
   $("rankchange").onclick=showRankPick;
+  $("drillreset").onclick=()=>{
+    if(!confirm("Forget which cards you've missed in "+SET+"? The drill goes back to rarity-only odds.")) return;
+    drillErr={}; saveDrillErr(); drillCard=null; renderDrill();
+  };
   window.addEventListener("hashchange",()=>{
     const {set,view}=parseHash();
     if(set && ALL_SETS[set] && set!==SET) loadSet(set);
