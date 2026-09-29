@@ -288,6 +288,7 @@
 
 <script src="cards.js?v=53996984"></script>
 <script src="cards_hob.js?v=8274858e"></script>
+<script src="cards_fra.js?v=c9433218"></script>
 <script>
 "use strict";
 
@@ -322,6 +323,14 @@ const SET_META = {
     booster: { size:14, rareMythicSlots:1, mythicChance:0.135, uncommons:3,
                commons:7, landSlots:1, basicLandChance:0.50, marChance:0,
                wildcards:2, wildcardRare:0.145, wildcardUncommon:0.30 },
+  },
+  FRA: {
+    title: '<span class="mk">REALITY FRACTURE</span> — Draft Rating Trainer',
+    accent: "#a78bfa",
+    // Approximate 14-card practice pack; echoed pairs are not linked yet.
+    booster: { size:14, rareMythicSlots:1, mythicChance:0.17, uncommons:4,
+               commons:6, landSlots:1, basicLandChance:0.455, marChance:1/55,
+               wildcards:2, wildcardRare:0.08, wildcardUncommon:0.45 },
   },
 };
 
@@ -500,23 +509,24 @@ const COLORNAME = {W:"white",U:"blue",B:"black",R:"red",G:"green"};
 let studyFilter="all", colorFilter="all";
 function renderStudy(){
   const q=$("studysearch").value.trim().toLowerCase();
-  const rows = RATED.filter(c=>(studyFilter==="all"||c.rarity===studyFilter)
+  const rows = DB.cards.filter(c=>!c.is_basic && (studyFilter==="all"||c.rarity===studyFilter)
                               && (colorFilter==="all"||(c.colors&&c.colors.includes(colorFilter)))
-                              && (!q || c.name.toLowerCase().includes(q)));
+                              && (!q || c.name.toLowerCase().includes(q)))
+    .sort((a,b)=>(b.score ?? -1)-(a.score ?? -1) || a.name.localeCompare(b.name));
   const tags=[studyFilter!=="all"?studyFilter:null, colorFilter!=="all"?COLORNAME[colorFilter]:null].filter(Boolean);
   $("studylist").innerHTML =
-    `<p class="scount">${rows.length} cards${tags.length?` · ${tags.join(" · ")}`:""} · sorted best → worst</p>`+
+    `<p class="scount">${rows.length} cards${tags.length?` · ${tags.join(" · ")}`:""} · rated cards first, best → worst · — means not enough games yet</p>`+
     rows.map((c,i)=>{
-      const sc=c.score, hue = scoreHue(sc);
+      const sc=c.score, hue = sc == null ? "var(--muted)" : scoreHue(sc);
       const th=c.image||c.image_small;
       return `<div class="srow">
-        <div class="rk">${i+1}</div>
+        <div class="rk">${sc == null ? "—" : i+1}</div>
         <div class="thumb">
           ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
-          <span class="scorebadge" style="color:${hue}">${f1(sc)}</span>
+          <span class="scorebadge" style="color:${hue}">${sc == null ? "—" : f1(sc)}</span>
         </div>
         <div><div class="snm">${c.name}</div>
-             <div class="smeta ${rarityClass(c)}">${rarityLabel(c)}${c.cost?` · ${c.cost}`:""}${c.is_land?" · land":""}</div></div>
+             <div class="smeta ${rarityClass(c)}">${rarityLabel(c)}${c.cost?` · ${c.cost}`:""}${c.is_land?" · land":""}${sc == null ? ` · ${c.total_games} games; awaiting rating` : ""}</div></div>
       </div>`;
     }).join("");
 }
@@ -714,6 +724,11 @@ function updateRankInfo(){
     (avg!=null?` · avg rank error <b style="color:var(--ink)">${avg.toFixed(1)}</b>`:"");
 }
 function nextRankCard(){
+  if(!RANK_BY_COLOR[rankColor].length){
+    $("rankcardwrap").innerHTML = '<p class="scount">No rated cards in this color yet. Browse the cards in Study while more games are recorded.</p>';
+    updateRankInfo();
+    return;
+  }
   rankCard = weightedPick(RANK_BY_COLOR[rankColor], rankCard);
   rankRevealed=false;
   const c=rankCard, TOP=rankTop(), th=c.image||c.image_small;
@@ -848,10 +863,12 @@ function loadSet(code){
     `A simulated ${home} Play Booster is dealt face-up. Type a rating from <b>1.0</b> (worst)
      to <b>5.0</b> (bomb) for each card — decimals welcome, e.g. <b>3.5</b> — then hit
      <b>Reveal</b> to see the true ratings (from ${ds?"draftsim's expert ratings":"real In-Hand Win Rates"}) and how close you were.`;
+  if(code === "FRA") $("startblurb").innerHTML +=
+    ' <br><small>Practice packs use approximate rarity odds; echoed pairs are not guaranteed.</small>';
   const pools =
     `pools: ${POOL.common.length}C / ${POOL.uncommon.length}U / ${POOL.rare.length}R / ${POOL.mythic.length}M · `+
     `${POOL.commonLand.length} dual + ${POOL.basic.length} basic lands`+
-    (POOL.mar.length?` · ${POOL.mar.length} Marvel`:"");
+    (POOL.mar.length?` · ${POOL.mar.length} ${code === "MSH" ? "Marvel" : "Special Guests"}`:"");
   if(ds){
     $("dataline").innerHTML =
       `${DB.set_name||home}: ${DB.rated_count} of ${DB.card_count} cards rated · `+
@@ -862,8 +879,9 @@ function loadSet(code){
       `once the set has draft data — re-run <code>python3 fetch_cards.py --set ${code.toLowerCase()}</code> to refresh.`;
   } else {
     $("dataline").innerHTML =
-      `${DB.rated_count} of ${DB.card_count} cards rated · WR range `+
-      `${f1(DB.wr_min*100)}%–${f1(DB.wr_max*100)}% · min ${DB.min_games} games · ${pools}`;
+      `${DB.rated_count} of ${DB.card_count} cards rated · `+
+      (DB.rated_count ? `WR range ${f1(DB.wr_min*100)}%–${f1(DB.wr_max*100)}%` : 'Waiting for enough games to rate cards')+
+      ` · min ${DB.min_games} games · ${pools}`;
     $("foot").innerHTML =
       `Score = percentile rank of in-hand WR, mapped to 1–5. Signals compare that `+
       `to ALSA (pick order). Data from `+

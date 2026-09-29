@@ -40,9 +40,11 @@ import datetime
 import hashlib
 import io
 import json
+import pathlib
 import re
 import sys
 import urllib.request
+import urllib.error
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (draft-bot)"
 
@@ -60,6 +62,12 @@ SETS = {
         "name": "The Hobbit",
         "untapped_slug": "the-hobbit",
         "out": "cards_hob.json",
+    },
+    "fra": {
+        "code": "FRA",
+        "name": "Reality Fracture",
+        "untapped_slug": "reality-fracture",
+        "out": "cards_fra.json",
     },
 }
 
@@ -189,22 +197,37 @@ def build_cards_untapped(data):
     return cards
 
 
-def try_untapped(cfg):
+def try_untapped(cfg, strict=False):
     """Return (cards, source_url) from untapped, or (None, url) if no data yet."""
     url = untapped_url(cfg)
     print(f"Downloading {url} ...")
     try:
         html = fetch(url)
+    except urllib.error.HTTPError as e:
+        if strict and e.code != 404:
+            raise
+        print(f"  untapped fetch failed ({e})")
+        return None, url
     except Exception as e:
+        if strict:
+            raise
         print(f"  untapped fetch failed ({e})")
         return None, url
     data = parse_next_data(html)
+    if strict and data is None:
+        raise ValueError("Untapped page has no __NEXT_DATA__; its layout may have changed.")
     ssr = data and data.get("props", {}).get("pageProps", {}).get("ssrProps")
     stats = ssr and (ssr.get("limitedCardStatsResp") or {}).get("data", {}).get("data")
     if not stats:
         print("  untapped has no card stats for this set yet.")
         return None, url
-    return build_cards_untapped(data), url
+    cards = build_cards_untapped(data)
+    if strict and not any(c["set"] == cfg["code"] for c in cards):
+        raise ValueError(f"Untapped returned no {cfg['code']} cards; refusing to publish another set.")
+    if strict and not any(c["games"] > 0 for c in cards if c["set"] == cfg["code"]):
+        print("  untapped has no games for this set yet.")
+        return None, url
+    return cards, url
 
 
 # ==========================================================================
@@ -478,8 +501,12 @@ def main():
     ap.add_argument("--no-images", action="store_true",
                     help="don't fetch card images from Scryfall")
     ap.add_argument("--out", default=None,
-                    help="output file (default per set: cards.json / cards_hob.json)")
+                    help="output file (default per set: cards.json / cards_hob.json / cards_fra.json)")
+    ap.add_argument("--wait-for-data", action="store_true",
+                    help="Untapped only: exit 2 without writing when data is not available")
     args = ap.parse_args()
+    if args.wait_for_data and args.source != "untapped":
+        ap.error("--wait-for-data requires --source untapped")
 
     cfg = SETS[args.set]
     out = args.out or cfg["out"]
@@ -488,10 +515,13 @@ def main():
     source = None
     src_url = untapped_url(cfg)
     if args.source in ("auto", "untapped"):
-        cards, src_url = try_untapped(cfg)
+        cards, src_url = try_untapped(cfg, strict=args.wait_for_data)
         if cards:
             source = "untapped"
         elif args.source == "untapped":
+            if args.wait_for_data:
+                print("WAITING: Untapped has no usable data yet; existing files are unchanged.")
+                return 2
             sys.exit("No untapped data (yet) — try --source auto/draftsim.")
     if cards is None:
         tsv, src_url = fetch_draftsim_tsv(cfg)
@@ -557,6 +587,25 @@ def main():
         "changes": changes,
         "cards": cards,
     }
+    if args.wait_for_data and not args.no_images:
+        previous = {c["id"]: c for c in (old or {}).get("cards", [])}
+        for card in cards:
+            if not card.get("image"):
+                prior = previous.get(card["id"], {})
+                for key in ("image", "image_small", "is_land", "is_basic"):
+                    if key in prior:
+                        card[key] = prior[key]
+        if not any(c.get("image") for c in cards if c["set"] == cfg["code"]):
+            raise ValueError("No card images available; refusing to publish an unusable set.")
+        # Missing basics usually mean a failed Scryfall request. Keep the last
+        # complete database rather than silently changing booster land slots.
+        if not any(c.get("is_basic") for c in cards):
+            raise ValueError("No basic lands available; keeping the existing database.")
+    # Re-fetching the same batch should not create a timestamp-only commit.
+    history_keys = {"generated_at", "changes", "changes_since"}
+    if old and all(old.get(k) == v for k, v in payload.items() if k not in history_keys):
+        for key in history_keys:
+            payload[key] = old.get(key)
     with open(out, "w") as f:
         json.dump(payload, f, indent=1, ensure_ascii=False)
     print(f"Wrote {out}  ({len(cards)} cards).")
@@ -579,6 +628,7 @@ def main():
     # content hash, so browsers (esp. iOS Safari) and GitHub Pages' CDN fetch
     # the fresh file instead of serving a stale cached copy.
     bump_cache_version(js_out, js_body)
+    return 0
 
 
 def bump_cache_version(js_out, js_body, html_path="index.html"):
@@ -591,11 +641,15 @@ def bump_cache_version(js_out, js_body, html_path="index.html"):
     new_html, n = re.subn(
         r'(<script src="%s)(\?v=[^"]*)?(")' % re.escape(js_out),
         r'\1?v=%s\3' % ver, html)
-    if n and new_html != html:
+    if not n and pathlib.Path(js_out).name == js_out:
+        # Register a newly imported set only after its data files exist.
+        new_html = html.replace('<script>\n"use strict";',
+                                f'<script src="{js_out}?v={ver}"></script>\n<script>\n"use strict";', 1)
+    if new_html != html:
         with open(html_path, "w") as f:
             f.write(new_html)
         print(f"Stamped {html_path} -> {js_out}?v={ver}")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
