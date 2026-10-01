@@ -289,6 +289,8 @@
 <script src="cards.js?v=53996984"></script>
 <script src="cards_hob.js?v=c5fd446b"></script>
 <script src="cards_fra.js?v=309504f3"></script>
+<script src="fra_catalog.js?v=1"></script>
+<script src="fra_boosters.js?v=1"></script>
 <script>
 "use strict";
 
@@ -327,10 +329,7 @@ const SET_META = {
   FRA: {
     title: '<span class="mk">REALITY FRACTURE</span> — Draft Rating Trainer',
     accent: "#a78bfa",
-    // Approximate 14-card practice pack; echoed pairs are not linked yet.
-    booster: { size:14, rareMythicSlots:1, mythicChance:0.17, uncommons:4,
-               commons:6, landSlots:1, basicLandChance:0.455, marChance:1/55,
-               wildcards:2, wildcardRare:0.08, wildcardUncommon:0.45 },
+    booster: { size:14 }, // Dedicated echoed-pair collation in fra_boosters.js.
   },
 };
 
@@ -339,6 +338,7 @@ const ALL_SETS = window.__CARDS_BY_SET__ || (window.__CARDS__ ? {MSH: window.__C
 
 /* current-set state — (re)built by loadSet() */
 let SET=null, DB=null, BOOSTER=null, POOL=null;
+let fraBooster=null;
 let RATED=[], RANK_BY_COLOR={}, wheelsAll=[], trapsAll=[], WHEELS=[], TRAPS=[], CHANGES=[];
 let signalsBuilt=false, changesBuilt=false, currentView="play";
 
@@ -350,6 +350,7 @@ const scoreHue = s => s>=4?"var(--c5)":s>=3.4?"var(--c4)":s>=2.6?"var(--c3)":s>=
 function sample(arr,n,used){const out=[];let guard=0;while(out.length<n&&guard++<999){const c=pick(arr);if(c&&!used.has(c.id)){used.add(c.id);out.push(c);}if(used.size>=arr.length)break;}return out;}
 
 function buildPack(){
+  if(SET === "FRA") return fraBooster.buildPack();
   const used=new Set(); let cards=[];
   for(let i=0;i<BOOSTER.rareMythicSlots;i++){
     const mythic = Math.random()<BOOSTER.mythicChance && POOL.mythic.length;
@@ -834,6 +835,7 @@ function loadSet(code){
   SET=code; DB=ALL_SETS[code];
   const meta=SET_META[code]||SET_META.MSH, home=DB.set||code;
   BOOSTER=meta.booster;
+  fraBooster=code === "FRA" ? FRA_BOOSTERS.create(DB.cards) : null;
   POOL={ common:[], commonLand:[], uncommon:[], rare:[], mythic:[], mar:[], basic:[] };
   for (const c of DB.cards) {
     if (c.is_basic)            POOL.basic.push(c);
@@ -864,8 +866,11 @@ function loadSet(code){
      to <b>5.0</b> (bomb) for each card — decimals welcome, e.g. <b>3.5</b> — then hit
      <b>Reveal</b> to see the true ratings (from ${ds?"draftsim's expert ratings":"real In-Hand Win Rates"}) and how close you were.`;
   if(code === "FRA") $("startblurb").innerHTML +=
-    ' <br><small>Practice packs use approximate rarity odds; echoed pairs are not guaranteed.</small>';
-  const pools =
+    ' <br><small>14 cards, including an echoed pair and a third card from another pair, shuffled together. '+
+    'Rare and foil odds are approximate. <a href="https://github.com/maikch2/msh-draft-trainer#reality-fracture-booster-rules" target="_blank">Booster rules</a></small>';
+  const pools = code === "FRA"
+    ? 'booster pools: 71C / 43U / 50R / 20M · 43 echoed pairs · 10 dual + 5 basic lands · 10 Special Guests'
+    :
     `pools: ${POOL.common.length}C / ${POOL.uncommon.length}U / ${POOL.rare.length}R / ${POOL.mythic.length}M · `+
     `${POOL.commonLand.length} dual + ${POOL.basic.length} basic lands`+
     (POOL.mar.length?` · ${POOL.mar.length} ${code === "MSH" ? "Marvel" : "Special Guests"}`:"");

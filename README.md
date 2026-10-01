@@ -22,6 +22,8 @@ has real draft data.
 | `cards_hob.json` / `cards_hob.js` | Same, for The Hobbit. |
 | `cards_fra.json` / `cards_fra.js` | Same, for Reality Fracture. |
 | `index.html` | The draft simulator and all five practice views. |
+| `fra_boosters.js` / `fra_catalog.js` | FRA slot rules and complete booster inventory, including 43 explicit echoed pairs. Independent of win-rate coverage. |
+| `test_fra_boosters.js` | Booster composition, pair, probability and browser integration checks. Run with `node --test test_fra_boosters.js`. |
 | `refresh_cards.py` | Safe Untapped refresh for a single set, with optional GitHub publication. |
 | `refresh_hob.sh` | Existing daily HOB refresh, run by macOS launchd. |
 | `test_fetch_cards.py` | Import availability and registration regression tests. |
@@ -85,9 +87,7 @@ that script's content hash so browsers load the latest data. The existing
 500-total-game scoring threshold remains in place; cards below it are visible
 but unscored. Ratings remain percentile ranks mapped to 1–5.
 
-FRA practice packs approximate 14-card boosters and include Special Guests.
-They do not reproduce the guaranteed echoed pairs or exact slot distributions
-in [Wizards' booster description](https://magic.wizards.com/en/news/feature/collecting-reality-fracture).
+FRA practice packs use the dedicated slot rules described below.
 Study, Drill, Rank, Signals and Changes use the imported card data directly.
 
 The Codex automation starts with **hourly availability checks**. Once real
@@ -132,3 +132,49 @@ Pushes use the repo-local credential helper for the personal `maikch2` account.
 Do not replace it with the default work-account credentials. No tokens belong
 in the repository. Pull before manual data work because scheduled HOB refreshes
 also update `main`.
+
+## Reality Fracture booster rules
+
+Every pack contains 14 cards:
+
+| Slots | Eligible cards and selection |
+|-------|------------------------------|
+| 6 commons | 71 main-set commons. A Special Guest replaces one in 1/55 packs. |
+| 1 uncommon | 43 non-echo uncommons. |
+| 1 common/uncommon | 23% common, 77% non-echo uncommon. |
+| 3 echoed cards | One actual same-rarity pair plus one card from another pair. All 43 pairs are included, including the five Way pairs. |
+| 1 rare/mythic | 50 non-echo rares or 20 non-echo mythics; approximately 1/6 mythic. |
+| 1 foil wildcard | Main-set cards, including echoed cards, excluding basics and the ten common duals. May duplicate a nonfoil card. |
+| 1 land | 45.5% basic, 54.5% common dual. Room of Refuge belongs in the ordinary common slots. |
+
+The slot recipe and eligible counts follow
+[Wizards' Play Booster contents](https://magic.wizards.com/en/news/feature/collecting-reality-fracture).
+Pair identities come from
+[The Legends of Reality Fracture](https://magic.wizards.com/en/news/magic-story/the-legends-of-reality-fracture)
+and the matching Way card illustrations (Healer/Necromancer, Mentor/Warlord,
+Cryomancer/Pyromancer, Mind Sculptor/Paradox, Deathbringer/Wildspeaker).
+[Wizards' design article](https://magic.wizards.com/en/news/feature/enter-the-echoverse-with-reality-fracture-design)
+also explains the three-card echo sheet and depicts the Cryomancer/Pyromancer pair.
+
+Echo rarity uses [Arena's published upgrade odds](https://magic.wizards.com/en/mtgarena/drop-rates):
+90% uncommon, approximately 8.246% rare and 1.754% mythic. The pair and third
+card receive separate rarity rolls. Cards are uniform within each selected
+rarity. The complete pack is shuffled, with no labels or fixed positions that
+identify the third card. This avoids adding information about which partner
+was taken when a pack is passed; it cannot prevent inferences from the cards themselves.
+
+Some probabilities remain estimates: Wizards does not publish the complete
+print-sheet order or precise rates for every cosmetic treatment. The ordinary
+rare slot uses a 2:1 per-card rare/mythic weight. The foil slot normalizes the
+published base-frame weights 49.5:40.5:6:1.2 (C/U/R/M), giving approximately
+50.93%/41.67%/6.17%/1.23%. Cosmetic treatment differences and physical sheet
+correlations are not simulated. These packs combine the Play Booster slot
+recipe with Arena's echo odds; they are not an exact reproduction of Arena's
+unpublished complete collation algorithm.
+
+`fra_catalog.js` pins 295 unique booster-eligible cards from Scryfall's FRA
+base printings and Special Guests 159–168, checked on 2026-10-01. Stats are
+joined by set and front-face name when a set loads. Missing stats leave the
+card available but unscored, so daily imports cannot remove a partner or skew
+the booster pool. Root Maze, currently absent from Untapped's statistics, is
+included this way. All other sets retain their existing booster logic.
