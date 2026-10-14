@@ -171,6 +171,7 @@
       <button class="navbtn" id="nav-signals">🎯 Signals</button>
       <button class="navbtn" id="nav-changes">📈 Changes</button>
       <button class="navbtn" id="nav-rank">🏅 Rank quiz</button>
+      <a class="navbtn" href="api/" style="text-decoration:none">API</a>
     </nav>
     <div class="stats">
       <div>Packs<b id="st-packs">0</b></div>
@@ -291,6 +292,7 @@
 <script src="cards_fra.js?v=9fc4d63c"></script>
 <script src="fra_catalog.js?v=1"></script>
 <script src="fra_boosters.js?v=1"></script>
+<script src="drill_sampling.js?v=1"></script>
 <script>
 "use strict";
 
@@ -617,8 +619,7 @@ function recordErr(c, err){
 // never-rated cards get a slight priority (1.25×); rated ones scale with
 // their error EMA — nailed cards fade to 0.5×, badly missed ones up to 7×.
 function missMult(c){
-  const e=drillErr[c.id];
-  return e ? Math.min(7, 0.5 + 1.6*e[0]) : 1.25;
+  return DRILL_SAMPLING.missMultiplier(c, drillErr);
 }
 function updateDrillInfo(){
   const seen=RATED.filter(c=>drillErr[c.id]).length;
@@ -628,7 +629,7 @@ function updateDrillInfo(){
     ` · session: ${drillStats.n} rated`+(avg!=null?` · avg error <b style="color:var(--ink)">${f1(avg)}</b>`:"");
 }
 function nextDrillCard(){
-  drillCard = weightedPick(RATED, drillCard, c=>cardWeight(c)*missMult(c));
+  drillCard = DRILL_SAMPLING.next(RATED, drillCard, drillErr);
   drillRevealed=false;
   const c=drillCard, th=c.image||c.image_small;
   $("drillcardwrap").innerHTML = `
@@ -683,15 +684,9 @@ function renderDrill(){
 /* ---------- rank quiz (guess a card's rank within a chosen color) ---------- */
 // RATED is sorted best->worst, so each per-color list (built in loadSet) is the ranking.
 const CDOT = {W:"#f3edc8",U:"#4a90d9",B:"#8a8a96",R:"#d9534f",G:"#4aaf5f"};
-const RARITY_WEIGHT = {common:9, uncommon:3, rare:0.9, mythic:0.18, special:0.5};
-const cardWeight = c => c.set==="MAR" ? 0.35 : (RARITY_WEIGHT[c.rarity] ?? 1);
+const cardWeight = DRILL_SAMPLING.cardWeight;
 function weightedPick(arr, exclude, wfn=cardWeight){
-  const w = arr.map(c => c===exclude ? 0 : wfn(c));
-  let total = w.reduce((a,b)=>a+b,0);
-  if(total<=0) return arr[Math.floor(Math.random()*arr.length)];
-  let r = Math.random()*total;
-  for(let i=0;i<arr.length;i++){ r-=w[i]; if(r<=0) return arr[i]; }
-  return arr[arr.length-1];
+  return DRILL_SAMPLING.weightedPick(arr, exclude, wfn);
 }
 
 let rankColor=null, rankCard=null, rankRevealed=false;

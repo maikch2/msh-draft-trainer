@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice drill API — Draft Rating Trainer</title>
+  <style>
+    :root{color-scheme:dark;font:16px/1.6 system-ui,sans-serif;background:#11111b;color:#eeeef6}
+    *{box-sizing:border-box}body{margin:0}main{max-width:860px;margin:auto;padding:36px 22px}
+    h1{font-size:32px;line-height:1.2;margin:28px 0 12px}h2{font-size:20px}
+    a{color:#c3afff}p{color:#b9b9cc}section{background:#1b1b2b;border:1px solid #34344c;border-radius:14px;padding:24px;margin:24px 0}
+    .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center}button,select{font:inherit;padding:10px 16px;border:1px solid #57516e;border-radius:8px;background:#29253d;color:inherit}
+    button{cursor:pointer}button.primary{background:#b5a0fa;color:#171124;border-color:#b5a0fa;font-weight:700}button:disabled{opacity:.5;cursor:wait}
+    code{overflow-wrap:anywhere;font-size:13px}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:480px;overflow:auto;font-size:12px}
+    #status{min-height:26px}small{color:#b9b9cc}.links{display:flex;gap:24px;flex-wrap:wrap}
+    @media(max-width:480px){h1{font-size:26px}section{padding:18px}main{padding:22px 16px}}
+  </style>
+</head>
+<body>
+<main>
+  <a href="../">← Draft Rating Trainer</a>
+  <h1>Voice drill API</h1>
+  <p>Load a batch of cards for a spoken rating drill. Each card includes its name, colors, mana cost and rating from 1 to 5.</p>
+  <section>
+    <div class="controls">
+      <label for="set">Set</label>
+      <select id="set"><option value="fra">Reality Fracture</option><option value="hob">The Hobbit</option><option value="msh">Marvel Super Heroes</option></select>
+      <button class="primary" data-count="50">Generate 50 cards</button>
+      <button class="primary" data-count="100">Generate 100 cards</button>
+    </div>
+    <p id="status" role="status" aria-live="polite">Choose a batch size to begin.</p>
+    <div class="links"><a id="link50">Open 50 cards as JSON</a><a id="link100">Open 100 cards as JSON</a></div>
+    <div id="result" hidden>
+      <p>Copy this batch into your voice chat. Ask the assistant to read the name, colors and mana cost, wait for your grade, then reveal the rating and your error.</p>
+      <div class="controls"><button id="copy">Copy batch</button><a id="download" download="drill-cards.json">Download JSON</a></div>
+      <details><summary>Show JSON (includes answers)</summary><pre id="json"></pre></details>
+    </div>
+  </section>
+  <h2>Call it directly</h2>
+  <p><code id="endpoint"></code></p>
+  <p>No API key is needed. Use <code>set=fra</code>, <code>hob</code> or <code>msh</code> and <code>count=50</code> or <code>100</code>. Add a new <code>nonce</code> value if your chat tool reuses a previous response.</p>
+  <p>Selection uses the same rarity weights as Drill with reset memory. Only rated cards are included. Cards may repeat later in the batch, but never twice in a row. Your browser's mistake history is not included; API clients can supply history with POST.</p>
+  <small>This page is hosted on maikch2's GitHub Pages site. The API runs on Sites and reads the latest published card data. <a href="https://github.com/maikch2/msh-draft-trainer#public-voice-drill-api">API documentation</a></small>
+</main>
+<script>
+  const base = 'https://draft-rating-api.andres336403.chatgpt.site/api/drill';
+  const set = document.getElementById('set');
+  const status = document.getElementById('status');
+  const buttons = [...document.querySelectorAll('[data-count]')];
+  let batch = '', blobUrl;
+  function endpoint(count) { return `${base}?set=${set.value}&count=${count}`; }
+  function updateLinks() {
+    document.getElementById('link50').href = endpoint(50);
+    document.getElementById('link100').href = endpoint(100);
+    document.getElementById('endpoint').textContent = endpoint(100);
+    document.getElementById('result').hidden = true;
+    status.textContent = 'Choose a batch size to begin.';
+  }
+  set.addEventListener('change', updateLinks);
+  updateLinks();
+  for (const button of buttons) button.addEventListener('click', async () => {
+    buttons.forEach(b => b.disabled = true); set.disabled = true;
+    document.getElementById('result').hidden = true;
+    status.textContent = 'Loading cards…';
+    try {
+      const response = await fetch(endpoint(button.dataset.count) + '&nonce=' + Date.now(), {cache:'no-store',signal:AbortSignal.timeout(20000)});
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      if (!Array.isArray(data.cards) || data.cards.length !== Number(button.dataset.count)) throw new Error();
+      batch = JSON.stringify(data, null, 2);
+      document.getElementById('json').textContent = batch;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      blobUrl = URL.createObjectURL(new Blob([batch], {type:'application/json'}));
+      document.getElementById('download').href = blobUrl;
+      document.getElementById('result').hidden = false;
+      status.textContent = `${data.count} ${data.set} cards ready. Ratings updated ${data.data_updated_at}.`;
+    } catch {
+      status.textContent = 'Could not load a batch. Try again, or open a JSON link above.';
+    } finally { buttons.forEach(b => b.disabled = false); set.disabled = false; }
+  });
+  document.getElementById('copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(batch); status.textContent = 'Batch copied. Paste it into your voice chat.'; }
+    catch { status.textContent = 'Copy was unavailable. Download the JSON or copy it from Show JSON.'; }
+  });
+</script>
+</body>
+</html>

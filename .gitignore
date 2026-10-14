@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+# Separate Sites checkout; canonical API sources live in api/ and drill_sampling.js.
+/drill-api/

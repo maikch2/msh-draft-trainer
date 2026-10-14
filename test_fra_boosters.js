@@ -125,7 +125,7 @@ test("display packs contain 14 cards, hide slot roles and shuffle echo positions
 test("browser script registration and buildPack use FRA engine", () => {
   const html = fs.readFileSync("index.html", "utf8");
   const context = vm.createContext({ console, Math, window: {} });
-  for (const file of ["fra_catalog.js", "fra_boosters.js"]) {
+  for (const file of ["fra_catalog.js", "fra_boosters.js", "drill_sampling.js"]) {
     assert(html.includes(`src="${file}?`));
     vm.runInContext(fs.readFileSync(file, "utf8"), context);
   }

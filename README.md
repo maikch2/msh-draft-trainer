@@ -24,6 +24,10 @@ has real draft data.
 | `index.html` | The draft simulator and all five practice views. |
 | `fra_boosters.js` / `fra_catalog.js` | FRA slot rules and complete booster inventory, including 43 explicit echoed pairs. Independent of win-rate coverage. |
 | `test_fra_boosters.js` | Booster composition, pair, probability and browser integration checks. Run with `node --test test_fra_boosters.js`. |
+| `drill_sampling.js` | Shared rarity and mistake weighting used by Drill, Rank and the public API. |
+| `api/drill.mjs` | Public batch API handler. Its server entrypoint is hosted separately with Sites. |
+| `test_drill_api.mjs` | Selection parity, API responses, validation, caching and error checks. |
+| `prepare_drill_api.py` | Copies canonical API sources into the ignored `drill-api/` Sites checkout before deployment. |
 | `refresh_cards.py` | Safe Untapped refresh for a single set, with optional GitHub publication. |
 | `refresh_hob.sh` | Existing daily HOB refresh, run by macOS launchd. |
 | `test_fetch_cards.py` | Import availability and registration regression tests. |
@@ -178,3 +182,75 @@ joined by set and front-face name when a set loads. Missing stats leave the
 card available but unscored, so daily imports cannot remove a partner or skew
 the booster pool. Root Maze, currently absent from Untapped's statistics, is
 included this way. All other sets retain their existing booster logic.
+
+## Public voice drill API
+
+Open the [API page on the maikch site](https://maikch2.github.io/msh-draft-trainer/api/)
+to generate, copy or download 50 or 100 cards. It is also linked from the trainer.
+
+Base URL: https://draft-rating-api.andres336403.chatgpt.site
+
+- [50 FRA cards](https://draft-rating-api.andres336403.chatgpt.site/api/drill?set=fra&count=50)
+- [100 FRA cards](https://draft-rating-api.andres336403.chatgpt.site/api/drill?set=fra&count=100)
+
+`GET /api/drill?set=fra&count=100` returns fresh random cards on every request.
+Supported sets: `fra` (default), `hob`, `msh`. Count must be `50` or `100`
+(default). No authentication is required. CORS permits external clients.
+Responses use `Cache-Control: no-store`; chat tools that reuse URL results can
+append a different `nonce` parameter to request another batch.
+
+Each card contains `id`, `name`, `colors` (plain English), `mana_cost` (such as
+`{2}{U}`), `mana_value`, `rarity`, and `rating` (the same 1–5 score as Drill).
+Colorless cards use `["colorless"]`; lands have an empty mana cost, not a
+zero-mana spell cost. The response also includes `data_updated_at`,
+`rating_source`, `min_games`, sampling details and `next_previous_card_id`.
+
+For a spoken session, load one batch, read only each card's name, colors and
+mana cost, wait for a grade, then reveal the rating and calculate
+`abs(guess - rating)`. The response includes the answers; the speaking assistant
+must withhold them until the user guesses.
+
+Selection uses the same `drill_sampling.js` as the page: per-card weights of
+9 common, 3 uncommon, 0.9 rare, 0.18 mythic, 0.5 special, and 0.35 for MAR
+bonus cards. These are weights per card, **not percentages per rarity**.
+Only rated cards enter the pool. The last card is excluded from the next draw;
+later repeats are allowed. Requiring 100 unique cards would change Drill's
+distribution, so batches intentionally allow later repeats.
+
+GET matches Drill with reset memory. Browser mistake history is private to
+that browser and is not automatically available to this public API. To use it,
+POST `application/json` with the same set and count plus optional history and
+the last card ID:
+
+```json
+{
+  "set": "fra",
+  "count": 50,
+  "history": {"1132632": [1.5, 3]},
+  "previous_card_id": 1132632
+}
+```
+
+Each history entry is `[error_moving_average, times_rated]`, as stored under
+`drill_err_FRA` in the trainer's localStorage. Unseen cards get a 1.25 multiplier;
+seen cards get `min(7, 0.5 + 1.6 * error_moving_average)`. After an answer, the
+page updates the average to `round(0.6 * old + 0.4 * error, 2)`, or the rounded
+error for a first answer. A batch holds that history fixed: it cannot adapt to
+future answers. Send updated history with the next request to continue learning.
+
+The API fetches the existing GitHub Pages card files, caching source data for
+at most 60 seconds per server instance. Daily refreshes require no API redeploy.
+Unavailable source data returns HTTP 503; invalid parameters return 400,
+unsupported POST media types 415 and bodies above 32 KB 413.
+
+The API runs on Sites because GitHub Pages cannot execute server code.
+Its project ID is `appgprj_6acf71fdfa148191987a4f08a134a47c`; the source checkout
+is `drill-api/`, ignored by this repository and versioned in the Site's own
+source repository. Restore that same Site with the Sites source helper if the
+checkout is missing. Do not create a replacement project.
+
+Before deploying API changes, run `python3 prepare_drill_api.py`, then
+`node --test test_drill_api.mjs test_fra_boosters.js`, and build/package the Site
+using the Sites workflow. That script copies `api/drill.mjs` and the shared
+sampler without modifying them. Redeploy the Site whenever either changes;
+ordinary card-data refreshes only need the existing GitHub publication.
