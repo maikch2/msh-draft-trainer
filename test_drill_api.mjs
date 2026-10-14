@@ -75,6 +75,34 @@ test('POST history matches shared sampler and respects previous card', async () 
   assert.notEqual(data.cards[0].id,id);
 });
 
+test('default and count=all return every source card once, including unrated cards', async () => {
+  for (const [set,path] of Object.entries({fra:'cards_fra.json',hob:'cards_hob.json',msh:'cards.json'})) {
+    const db=JSON.parse(fs.readFileSync(path));
+    const handle=createHandler({sampling,fetchData:async()=>Response.json(db),random:()=>{throw new Error('must not sample');}});
+    for (const req of [request(`?set=${set}`),request(`?set=${set}&count=all`),post({set,count:'all',history:{[db.cards[0].id]:[4,1]},previous_card_id:db.cards[0].id})]) {
+      const response=await handle(req);
+      assert.equal(response.status,200);
+      const data=await response.json();
+      assert.equal(data.count,db.cards.length);
+      assert.deepEqual(data.cards.map(c=>c.id),db.cards.map(c=>c.id));
+      assert.equal(new Set(data.cards.map(c=>c.id)).size,data.count);
+      assert.deepEqual(data.cards.map(c=>c.rating),db.cards.map(c=>c.score??null));
+      assert.equal(data.sampling.mode,'all');
+      assert.equal(data.next_previous_card_id,null);
+    }
+  }
+});
+
+test('complete catalogue remains available when no cards have ratings', async () => {
+  const handle=createHandler({sampling,fetchData:async()=>Response.json({...database,cards:database.cards.map(c=>({...c,score:null}))})});
+  const response=await handle(request(''));
+  assert.equal(response.status,200);
+  const data=await response.json();
+  assert.equal(data.cards.length,database.cards.length);
+  assert(data.cards.every(c=>c.rating===null));
+  assert.equal((await handle(request('?count=50'))).status,503);
+});
+
 test('all sets read their existing source; unrated cards never enter batches', async () => {
   const paths={fra:'cards_fra.json',hob:'cards_hob.json',msh:'cards.json'};
   const handle=createHandler({sampling,fetchData:async url=>Response.json(JSON.parse(fs.readFileSync(new URL(url).pathname.split('/').at(-1))))});

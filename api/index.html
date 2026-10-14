@@ -20,16 +20,17 @@
 <main>
   <a href="../">← Draft Rating Trainer</a>
   <h1>Voice drill API</h1>
-  <p>Load a batch of cards for a spoken rating drill. Each card includes its name, colors, mana cost and rating from 1 to 5.</p>
+  <p>Load every card in a set, or a random batch for a spoken rating drill. Each card includes its name, colors, mana cost and rating from 1 to 5.</p>
   <section>
     <div class="controls">
       <label for="set">Set</label>
       <select id="set"><option value="fra">Reality Fracture</option><option value="hob">The Hobbit</option><option value="msh">Marvel Super Heroes</option></select>
-      <button class="primary" data-count="50">Generate 50 cards</button>
-      <button class="primary" data-count="100">Generate 100 cards</button>
+      <button class="primary" data-count="all">Get all cards</button>
+      <button data-count="50">Generate 50 cards</button>
+      <button data-count="100">Generate 100 cards</button>
     </div>
     <p id="status" role="status" aria-live="polite">Choose a batch size to begin.</p>
-    <div class="links"><a id="link50">Open 50 cards as JSON</a><a id="link100">Open 100 cards as JSON</a></div>
+    <div class="links"><a id="linkAll">Open all cards as JSON</a><a id="link50">Open 50 cards as JSON</a><a id="link100">Open 100 cards as JSON</a></div>
     <div id="result" hidden>
       <p>Copy this batch into your voice chat. Ask the assistant to read the name, colors and mana cost, wait for your grade, then reveal the rating and your error.</p>
       <div class="controls"><button id="copy">Copy batch</button><a id="download" download="drill-cards.json">Download JSON</a></div>
@@ -38,8 +39,8 @@
   </section>
   <h2>Call it directly</h2>
   <p><code id="endpoint"></code></p>
-  <p>No API key is needed. Use <code>set=fra</code>, <code>hob</code> or <code>msh</code> and <code>count=50</code> or <code>100</code>. Add a new <code>nonce</code> value if your chat tool reuses a previous response.</p>
-  <p>Selection uses the same rarity weights as Drill with reset memory. Only rated cards are included. Cards may repeat later in the batch, but never twice in a row. Your browser's mistake history is not included; API clients can supply history with POST.</p>
+  <p>No API key is needed. Use <code>set=fra</code>, <code>hob</code> or <code>msh</code> and <code>count=all</code> (default), <code>50</code> or <code>100</code>. Add a new <code>nonce</code> value if your chat tool reuses a previous response.</p>
+  <p>All cards returns each card from the published dataset once, in source order, including unrated cards with <code>rating: null</code>. Skip those when grading. Random batches use the same rarity weights as Drill with reset memory and include only rated cards. Cards may repeat later in the batch, but never twice in a row. Your browser's mistake history is not included; API clients can supply history with POST.</p>
   <small>This page is hosted on maikch2's GitHub Pages site. The API runs on Sites and reads the latest published card data. <a href="https://github.com/maikch2/msh-draft-trainer#public-voice-drill-api">API documentation</a></small>
 </main>
 <script>
@@ -50,9 +51,10 @@
   let batch = '', blobUrl;
   function endpoint(count) { return `${base}?set=${set.value}&count=${count}`; }
   function updateLinks() {
+    document.getElementById('linkAll').href = endpoint('all');
     document.getElementById('link50').href = endpoint(50);
     document.getElementById('link100').href = endpoint(100);
-    document.getElementById('endpoint').textContent = endpoint(100);
+    document.getElementById('endpoint').textContent = endpoint('all');
     document.getElementById('result').hidden = true;
     status.textContent = 'Choose a batch size to begin.';
   }
@@ -66,7 +68,7 @@
       const response = await fetch(endpoint(button.dataset.count) + '&nonce=' + Date.now(), {cache:'no-store',signal:AbortSignal.timeout(20000)});
       if (!response.ok) throw new Error();
       const data = await response.json();
-      if (!Array.isArray(data.cards) || data.cards.length !== Number(button.dataset.count)) throw new Error();
+      if (!Array.isArray(data.cards) || (button.dataset.count !== 'all' && data.cards.length !== Number(button.dataset.count))) throw new Error();
       batch = JSON.stringify(data, null, 2);
       document.getElementById('json').textContent = batch;
       if (blobUrl) URL.revokeObjectURL(blobUrl);

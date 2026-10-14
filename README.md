@@ -186,16 +186,22 @@ included this way. All other sets retain their existing booster logic.
 ## Public voice drill API
 
 Open the [API page on the maikch site](https://maikch2.github.io/msh-draft-trainer/api/)
-to generate, copy or download 50 or 100 cards. It is also linked from the trainer.
+to load all cards or generate, copy or download random batches of 50 or 100 cards. It is also linked from the trainer.
 
 Base URL: https://draft-rating-api.andres336403.chatgpt.site
 
+- [All FRA cards](https://draft-rating-api.andres336403.chatgpt.site/api/drill?set=fra&count=all)
 - [50 FRA cards](https://draft-rating-api.andres336403.chatgpt.site/api/drill?set=fra&count=50)
 - [100 FRA cards](https://draft-rating-api.andres336403.chatgpt.site/api/drill?set=fra&count=100)
 
-`GET /api/drill?set=fra&count=100` returns fresh random cards on every request.
-Supported sets: `fra` (default), `hob`, `msh`. Count must be `50` or `100`
-(default). No authentication is required. CORS permits external clients.
+`GET /api/drill?set=fra` returns every card in the published set dataset once,
+in source order. `count=all` is the default. Unrated cards have `rating: null`;
+no rarity weighting, history weighting or previous-card exclusion is applied.
+The response reports `sampling.mode: "all"` and `next_previous_card_id: null`.
+This includes imported cards, not a separate inventory of every printed card.
+
+Use `count=50` or `count=100` for fresh random drill batches.
+Supported sets: `fra` (default), `hob`, `msh`. No authentication is required. CORS permits external clients.
 Responses use `Cache-Control: no-store`; chat tools that reuse URL results can
 append a different `nonce` parameter to request another batch.
 
@@ -210,14 +216,14 @@ mana cost, wait for a grade, then reveal the rating and calculate
 `abs(guess - rating)`. The response includes the answers; the speaking assistant
 must withhold them until the user guesses.
 
-Selection uses the same `drill_sampling.js` as the page: per-card weights of
+Random batch selection uses the same `drill_sampling.js` as the page: per-card weights of
 9 common, 3 uncommon, 0.9 rare, 0.18 mythic, 0.5 special, and 0.35 for MAR
 bonus cards. These are weights per card, **not percentages per rarity**.
 Only rated cards enter the pool. The last card is excluded from the next draw;
 later repeats are allowed. Requiring 100 unique cards would change Drill's
 distribution, so batches intentionally allow later repeats.
 
-GET matches Drill with reset memory. Browser mistake history is private to
+Random GET batches match Drill with reset memory. Browser mistake history is private to
 that browser and is not automatically available to this public API. To use it,
 POST `application/json` with the same set and count plus optional history and
 the last card ID:

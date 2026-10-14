@@ -13,7 +13,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {status,
 const plainObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 export function createHandler({sampling, fetchData = fetch, random = Math.random, now = Date.now}) {
-  // Only source data is cached. Every response samples a fresh batch.
+  // Only source data is cached. Random batches are sampled per request.
   const cache = new Map();
   const pending = new Map();
   async function load(set) {
@@ -24,8 +24,7 @@ export function createHandler({sampling, fetchData = fetch, random = Math.random
       const response = await fetchData(BASE + SET_FILES[set], {signal:AbortSignal.timeout(10_000)});
       if (!response.ok) throw new Error('Upstream unavailable');
       const data = await response.json();
-      if (data.set !== set.toUpperCase() || !Array.isArray(data.cards) ||
-          data.cards.filter(c => Number.isFinite(c.score) && c.score >= 1 && c.score <= 5).length < 2)
+      if (data.set !== set.toUpperCase() || !Array.isArray(data.cards) || !data.cards.length)
         throw new Error('Invalid upstream data');
       cache.set(set, {data, at:now()});
       return data;
@@ -65,8 +64,8 @@ export function createHandler({sampling, fetchData = fetch, random = Math.random
       return json({error:'Unknown parameter. Use set, count, history, previous_card_id or nonce.'},400);
     const set = typeof input.set === 'string' ? input.set.toLowerCase() : input.set ?? 'fra';
     if (!Object.hasOwn(SET_FILES,set)) return json({error:'set must be fra, hob or msh.'},400);
-    const count = input.count ?? 100;
-    if (![50,100,'50','100'].includes(count)) return json({error:'count must be 50 or 100.'},400);
+    const count = input.count ?? 'all';
+    if (![50,100,'50','100','all'].includes(count)) return json({error:'count must be all, 50 or 100.'},400);
     const history = input.history ?? {};
     if (!plainObject(history) || Object.keys(history).length > 500 ||
         Object.entries(history).some(([id,e]) => !/^\d{1,12}$/.test(id) || !Array.isArray(e) || e.length !== 2 ||
@@ -77,17 +76,20 @@ export function createHandler({sampling, fetchData = fetch, random = Math.random
       return json({error:'previous_card_id must be a numeric card ID.'},400);
     try {
       const data = await load(set);
-      const cards = sampling.batch(data.cards, Number(count), history, previousId, random);
+      // A complete catalogue preserves source order, includes unrated cards,
+      // and does not apply weighting or previous-card exclusions.
+      const all = count === 'all';
+      const cards = all ? data.cards : sampling.batch(data.cards, Number(count), history, previousId, random);
       return json({
         set:set.toUpperCase(), count:cards.length, data_updated_at:data.generated_at,
         rating_source:data.rating_source, rating_scale:{min:1,max:5}, min_games:data.min_games,
-        sampling:{mode:Object.keys(history).length ? 'rarity-and-mistakes' : 'rarity',
+        sampling:all ? {mode:'all',order:'source',includes_unrated:true} : {mode:Object.keys(history).length ? 'rarity-and-mistakes' : 'rarity',
           per_card_weights:sampling.rarityWeights, marvel_bonus_weight:0.35,
           immediate_repeats:false, later_repeats:true, history_frozen_for_batch:true},
         cards:cards.map(c => ({id:c.id, name:c.name,
           colors:c.colors?.length ? c.colors.map(color => COLORS[color] ?? color) : ['colorless'],
-          mana_cost:c.cost || '', mana_value:c.mana_value, rarity:c.rarity, rating:c.score})),
-        next_previous_card_id:cards.at(-1).id,
+          mana_cost:c.cost || '', mana_value:c.mana_value, rarity:c.rarity, rating:c.score ?? null})),
+        next_previous_card_id:all ? null : cards.at(-1).id,
       });
     } catch { return json({error:'Card data is temporarily unavailable. Retry shortly.'},503); }
   };
