@@ -185,6 +185,48 @@ included this way. All other sets retain their existing booster logic.
 
 ## Public voice drill API
 
+### Hands-free practice
+
+On the trainer's **Drill** tab, select **Voice & synced practice**. This opens
+[personal practice](https://draft-rating-api.andres336403.chatgpt.site/practice/#fra/drill)
+and imports that browser's existing mistake memory. Sign in with the site owner's
+ChatGPT account, then select **Start voice** and allow the microphone. Use this
+signed-in page for both typed and spoken practice on every device. The original
+GitHub Pages page continues to keep its own local history.
+
+The drill reads the card name, colors and mana cost. Say a rating from 1 to 5;
+it speaks the rating and absolute error to one decimal, then reads the next card.
+Commands: **repeat**, **skip**, **pause**, **resume**, **stop**. Keep Safari open;
+screen-lock playback is not supported. Select Bluetooth audio and start the session
+before driving. The page requests a screen wake lock when the browser supports it.
+
+Voice uses a persistent OpenAI Realtime connection with `gpt-realtime-2.1-mini`.
+The browser selects cards with `drill_sampling.js` and grades against the same
+unrounded scores as typed Drill. The model interprets speech and reads a supplied
+sentence; it does not calculate grades or choose cards. The page shows measured
+response latency, starting when the service detects the end of speech. Actual
+phone and Bluetooth latency depends on the network and audio route.
+
+The server stores `OPENAI_API_KEY` and `VOICE_OWNER_EMAIL` as Sites secrets. Never
+put a permanent key in browser code or Git. OpenAI API usage is billed to that key's
+account. Voice starts require the owner's identity and the page's origin; they are
+limited to 12 per hour. Browser sessions close after 20 minutes. This is not a
+monetary spending cap; configure a project budget in the OpenAI dashboard as needed.
+
+Shared memory lives in D1, indexed by authenticated user and set. Each answer has
+a unique ID, so retries do not count twice. Answers queue locally during outages.
+Legacy imports seed cards with no cloud history and never replace existing cloud
+progress. Only mistake memory is shared; the displayed session counters restart
+when the page reloads. Raw voice audio and transcripts are not saved by this app.
+
+Canonical backend additions and migrations are under `api/site/`; the voice
+configuration is `api/voice-session.mjs`. `prepare_drill_api.py` copies these into
+the existing Sites checkout and builds its personal practice page from `index.html`.
+That page loads the published daily card datasets directly, so daily rating updates
+do not require a voice deployment. Run `node --test test_practice.mjs test_drill_api.mjs`
+before publishing changes. Enable the `DB` D1 binding in the Site's hosting manifest;
+Sites applies the committed Drizzle migrations during deployment.
+
 Open the [API page on the maikch site](https://maikch2.github.io/msh-draft-trainer/api/)
 to load all cards or generate, copy or download random batches of 50 or 100 cards. It is also linked from the trainer.
 

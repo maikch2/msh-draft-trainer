@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const require=createRequire(import.meta.url);
+const core=require('./practice_core.js');
+const answer=(id,error=1)=>({id,set:'FRA',kind:'answer',cardId:'123',error});
+
+test('replayed requests are idempotent and keep the existing Drill EMA',()=>{
+  const first=answer('a',2),second=answer('b',.5);
+  assert.deepEqual(core.replay([first,first,second,second]),{'123':[1.4,2]});
+});
+test('imports seed missing cards without overwriting cloud answers',()=>{
+  const imported={id:'import:device:FRA',set:'FRA',kind:'import',history:{123:[3,5],456:[2,4]}};
+  assert.deepEqual(core.replay([answer('a'),imported]),{'123':[1,1],'456':[2,4]});
+});
+test('reset is ordered with answers from other devices',()=>{
+  assert.deepEqual(core.replay([answer('a'),{id:'reset',set:'FRA',kind:'reset'},answer('b',.2)]),{'123':[.2,1]});
+});
+test('invalid history and prototype keys cannot enter shared state',()=>{
+  assert.deepEqual(core.cleanHistory(JSON.parse('{"__proto__":[1,2],"a":[5,1],"b":[1,-2],"c":[0.7,2]}')), {c:[.7,2]});
+  assert.equal(core.validEvent({...answer('a'),error:NaN}),false);
+  assert.equal(core.validEvent({...answer('a'),cardId:'__proto__'}),false);
+});
+test('rounds reject stale tokens and duplicate guesses without consuming valid retries',()=>{
+  const round=core.createRound({name:'Test',score:3.24,colors:['W'],cost:'{2}{W}'},'q1');
+  assert.throws(()=>round.submit(3,'q0'));
+  assert.throws(()=>round.submit(7,'q1'));
+  const result=round.submit(3.7,'q1');
+  assert.equal(result.rating,'3.2'); assert.equal(result.error,'0.5');
+  assert.ok(Math.abs(result.rawError-.46)<1e-9);
+  assert.throws(()=>round.submit(3.7,'q1'));
+  assert.equal('rating' in round.question,false);
+});
+test('a server acknowledgement preserves answers queued during a request',()=>{
+  const batch=[answer('a',1)], pending=[...batch,answer('b',2)];
+  const base=core.replay(batch), ack=new Set(batch.map(e=>e.id));
+  const remaining=pending.filter(e=>!ack.has(e.id));
+  assert.deepEqual(remaining.reduce(core.applyEvent,base),core.replay(pending));
+});
+test('both trainer pages and browser modules are valid JavaScript',()=>{
+  for(const path of ['index.html','drill-api/public/practice/index.html']) {
+    for(const match of readFileSync(path,'utf8').matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
+  }
+  new vm.Script(readFileSync('voice_drill.js','utf8'));
+});

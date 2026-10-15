@@ -200,6 +200,24 @@
 
   <!-- DRILL (one card at a time; misses come back more often) -->
   <div id="drillview" class="hidden">
+    <div id="voicepanel" class="panel" style="margin-bottom:16px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn" id="voice-start">Voice &amp; synced practice</button>
+        <a id="practice-signin" class="btn ghost hidden" target="_top">Sign in with ChatGPT</a>
+        <button class="btn ghost hidden" id="voice-pause">Pause</button>
+        <button class="btn ghost hidden" id="voice-stop">Stop</button>
+      </div>
+      <p id="practice-status" class="sub" style="margin:10px 0 0">Open personal practice to share progress between your phone and computer.</p>
+      <div id="voice-live" class="hidden" aria-live="polite">
+        <p id="voice-state"></p>
+        <p id="voice-question" style="font-size:21px;font-weight:700"></p>
+        <p id="voice-result"></p>
+        <p id="voice-transcript" class="sub"></p>
+        <p id="voice-timing" class="sub"></p>
+        <button class="btn ghost hidden" id="voice-audio">Enable audio</button>
+        <p class="sub">Say a rating, “repeat”, “skip”, “pause”, “resume”, or “stop”. Keep this page open. Set up audio before driving.</p>
+      </div>
+    </div>
     <div class="rankbar">
       <span id="drillinfo"></span>
       <button class="btn ghost" id="drillreset">Reset memory</button>
@@ -293,6 +311,7 @@
 <script src="fra_catalog.js?v=1"></script>
 <script src="fra_boosters.js?v=1"></script>
 <script src="drill_sampling.js?v=1"></script>
+<script src="practice_core.js?v=1"></script>
 <script>
 "use strict";
 
@@ -615,6 +634,7 @@ function recordErr(c, err){
   drillErr[c.id] = e ? [Math.round((0.6*e[0]+0.4*err)*100)/100, e[1]+1]
                      : [Math.round(err*100)/100, 1];
   saveDrillErr();
+  window.dispatchEvent(new CustomEvent("practice-answer", {detail:{set:SET, cardId:String(c.id), error:err}}));
 }
 // never-rated cards get a slight priority (1.25×); rated ones scale with
 // their error EMA — nailed cards fade to 0.5×, badly missed ones up to 7×.
@@ -817,7 +837,7 @@ function showView(which){
 
 // "#hob/study" -> {set:"HOB", view:"study"}; legacy "#study" and "#hob" also work.
 function parseHash(){
-  const h=location.hash.slice(1).toLowerCase();
+  const h=location.hash.slice(1).split("?")[0].toLowerCase();
   if(!h) return {set:null, view:null};
   const [a,b]=h.split("/");
   if(b!==undefined) return {set:a.toUpperCase(), view:b};
@@ -826,6 +846,7 @@ function parseHash(){
 
 /* ---------- set switching ---------- */
 function loadSet(code){
+  window.dispatchEvent(new Event("practice-set-changing"));
   if(!ALL_SETS[code]) code=Object.keys(ALL_SETS)[0];
   SET=code; DB=ALL_SETS[code];
   const meta=SET_META[code]||SET_META.MSH, home=DB.set||code;
@@ -889,9 +910,11 @@ function loadSet(code){
       `<code>python3 fetch_cards.py${code==="MSH"?"":" --set "+code.toLowerCase()}</code> to refresh as win rates drift.`;
   }
   try{ localStorage.setItem("trainer_set", code); }catch(e){}
+  window.dispatchEvent(new CustomEvent("practice-set", {detail:{set:SET}}));
 }
 
 function init(){
+  window.DRILL_TRANSFER = new URLSearchParams(location.hash.split("?")[1] || "").get("history");
   const codes=Object.keys(ALL_SETS);
   if(!codes.length){$("dataline").textContent="Could not load cards.js — run fetch_cards.py first.";return;}
   $("setnav").innerHTML = codes.map(c=>`<button class="navbtn" data-set="${c}">${c}</button>`).join("");
@@ -929,6 +952,7 @@ function init(){
   $("drillreset").onclick=()=>{
     if(!confirm("Forget which cards you've missed in "+SET+"? The drill goes back to rarity-only odds.")) return;
     drillErr={}; saveDrillErr(); drillCard=null; renderDrill();
+    window.dispatchEvent(new CustomEvent("practice-reset", {detail:{set:SET}}));
   };
   window.addEventListener("hashchange",()=>{
     const {set,view}=parseHash();
@@ -954,7 +978,14 @@ function init(){
     renderStudy();
   });
 }
+window.TRAINER = {
+  get set(){return SET;}, get cards(){return RATED;}, get history(){return drillErr;},
+  applyHistory(set, history){ if(set!==SET) return; drillErr=history; saveDrillErr(); updateDrillInfo(); },
+  record(card, error){recordErr(card,error); drillStats.n++; drillStats.errSum+=error; S.scored++; S.errSum+=error; updateStats(); updateDrillInfo();},
+  resumeDrill(){drillCard=null; renderDrill();}
+};
 init();
 </script>
+<script src="voice_drill.js?v=1"></script>
 </body>
 </html>
