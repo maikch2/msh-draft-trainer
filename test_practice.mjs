@@ -45,3 +45,13 @@ test('both trainer pages and browser modules are valid JavaScript',()=>{
   }
   new vm.Script(readFileSync('voice_drill.js','utf8'));
 });
+test('land prompts use produced mana rather than card colors or color identity',()=>{
+  const land={name:'Shipwreck Marsh',is_land:true,colors:[],color_identity:['R'],cost:'',produced_mana:['U','B']};
+  assert.equal(core.question(land,'q1').spoken_prompt,'Shipwreck Marsh. Land. Can produce blue or black mana. Your rating?');
+  assert.match(core.question({...land,produced_mana:['C']},'q1').spoken_prompt,/Can produce colorless mana/);
+  assert.match(core.question({...land,produced_mana:['W','U','B','R','G']},'q1').spoken_prompt,/mana of any color/);
+  assert.match(core.question({...land,produced_mana:['W','U','B','R','G','C']},'q1').spoken_prompt,/colorless mana or mana of any color/);
+  assert.match(core.question({...land,produced_mana:[]},'q1').spoken_prompt,/Does not produce mana directly/);
+  assert.match(core.question({...land,produced_mana:undefined},'q1').spoken_prompt,/Mana production unavailable/);
+  assert.equal(core.question({name:'Spell',colors:['U'],cost:'{1}{U}'},'q1').spoken_prompt,'Spell. blue. 1 generic, one blue. Your rating?');
+});

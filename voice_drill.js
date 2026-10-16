@@ -110,7 +110,7 @@
     v.roundNumber=(v.roundNumber || 0)+1;
     v.round=core.createRound(v.card,"q"+v.roundNumber);
     const q=v.round.question;
-    $("voice-question").textContent=q.name+" · "+q.colors+" · "+q.mana_cost;
+    $("voice-question").textContent=q.name+" · "+(q.mana_description ? "Land · "+q.mana_description : q.colors+" · "+q.mana_cost);
     return q;
   }
   async function wake(v) {

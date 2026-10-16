@@ -44,6 +44,20 @@
   function question(card, token) {
     const names = {W:"white", U:"blue", B:"black", R:"red", G:"green"};
     const colors=(card.colors || []).map(c => names[c] || c).join(" and ") || "colorless";
+    if (card.is_land) {
+      // Card color and color identity do not tell us which mana a land makes.
+      const mana=Array.isArray(card.produced_mana) ? [...new Set(card.produced_mana)] : null;
+      const types=mana?.map(symbol=>symbol === "C" ? "colorless" : names[symbol]);
+      let description="Mana production unavailable.";
+      if (types && types.every(Boolean)) {
+        if (!types.length) description="Does not produce mana directly.";
+        else if (["W","U","B","R","G"].every(c=>mana.includes(c))) {
+          description=mana.includes("C") ? "Can produce colorless mana or mana of any color." : "Can produce mana of any color.";
+        } else description="Can produce "+types.join(" or ")+" mana.";
+      }
+      return {token, name:card.name, colors, mana_cost:card.cost || "no mana cost", produced_mana:mana,
+        mana_description:description, spoken_prompt:card.name+". Land. "+description+" Your rating?"};
+    }
     const symbols=(card.cost || "").match(/\{[^}]+\}/g) || [];
     const spokenCost=symbols.map(s=>s.replace(/[{}()]/g,"").split("/").map(part=>
       names[part] ? "one "+names[part] : /^\d+$/.test(part) ? part+" generic" : ({C:"one colorless",X:"X generic",S:"one snow",P:"two life"}[part] || part)

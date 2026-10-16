@@ -1041,7 +1041,10 @@
    "tier": 4,
    "pick_gap": -0.01,
    "image": "https://cards.scryfall.io/normal/front/b/3/b39ebc4d-a01a-4401-ab3a-bf6142c93b47.jpg?1784543511",
-   "image_small": "https://cards.scryfall.io/small/front/b/3/b39ebc4d-a01a-4401-ab3a-bf6142c93b47.jpg?1784543511"
+   "image_small": "https://cards.scryfall.io/small/front/b/3/b39ebc4d-a01a-4401-ab3a-bf6142c93b47.jpg?1784543511",
+   "produced_mana": [
+    "R"
+   ]
   },
   {
    "id": 1113622,
@@ -1846,7 +1849,8 @@
    "tier": 3,
    "pick_gap": 0.29,
    "image": "https://cards.scryfall.io/normal/front/0/3/0365c439-30bf-4d32-a791-166751bdb996.jpg?1785323332",
-   "image_small": "https://cards.scryfall.io/small/front/0/3/0365c439-30bf-4d32-a791-166751bdb996.jpg?1785323332"
+   "image_small": "https://cards.scryfall.io/small/front/0/3/0365c439-30bf-4d32-a791-166751bdb996.jpg?1785323332",
+   "produced_mana": []
   },
   {
    "id": 1113274,
@@ -2061,7 +2065,11 @@
    "tier": 3,
    "pick_gap": 0.27,
    "image": "https://cards.scryfall.io/normal/front/d/7/d76df9d0-56cf-4351-a5e8-e6ae6fc791d1.jpg?1785323613",
-   "image_small": "https://cards.scryfall.io/small/front/d/7/d76df9d0-56cf-4351-a5e8-e6ae6fc791d1.jpg?1785323613"
+   "image_small": "https://cards.scryfall.io/small/front/d/7/d76df9d0-56cf-4351-a5e8-e6ae6fc791d1.jpg?1785323613",
+   "produced_mana": [
+    "B",
+    "R"
+   ]
   },
   {
    "id": 1113634,
@@ -2179,7 +2187,11 @@
    "tier": 3,
    "pick_gap": 0.3,
    "image": "https://cards.scryfall.io/normal/front/6/1/612cf954-f86c-4629-99df-4874d56fded3.jpg?1785323344",
-   "image_small": "https://cards.scryfall.io/small/front/6/1/612cf954-f86c-4629-99df-4874d56fded3.jpg?1785323344"
+   "image_small": "https://cards.scryfall.io/small/front/6/1/612cf954-f86c-4629-99df-4874d56fded3.jpg?1785323344",
+   "produced_mana": [
+    "B",
+    "G"
+   ]
   },
   {
    "id": 1113486,
@@ -2461,7 +2473,11 @@
    "tier": 3,
    "pick_gap": 0.3,
    "image": "https://cards.scryfall.io/normal/front/2/f/2fbd0584-81a7-4c47-8af1-1c8635899a97.jpg?1785323601",
-   "image_small": "https://cards.scryfall.io/small/front/2/f/2fbd0584-81a7-4c47-8af1-1c8635899a97.jpg?1785323601"
+   "image_small": "https://cards.scryfall.io/small/front/2/f/2fbd0584-81a7-4c47-8af1-1c8635899a97.jpg?1785323601",
+   "produced_mana": [
+    "U",
+    "W"
+   ]
   },
   {
    "id": 1113831,
@@ -2621,7 +2637,11 @@
    "tier": 3,
    "pick_gap": 0.21,
    "image": "https://cards.scryfall.io/normal/front/7/8/78045c43-5cbe-48ff-837d-e7c6baac2937.jpg?1785323594",
-   "image_small": "https://cards.scryfall.io/small/front/7/8/78045c43-5cbe-48ff-837d-e7c6baac2937.jpg?1785323594"
+   "image_small": "https://cards.scryfall.io/small/front/7/8/78045c43-5cbe-48ff-837d-e7c6baac2937.jpg?1785323594",
+   "produced_mana": [
+    "R",
+    "W"
+   ]
   },
   {
    "id": 1113757,
@@ -2715,7 +2735,8 @@
    "tier": 3,
    "pick_gap": -0.13,
    "image": "https://cards.scryfall.io/normal/front/d/d/dd1fd2ab-2565-4798-a832-fc849df82f74.jpg?1785323319",
-   "image_small": "https://cards.scryfall.io/small/front/d/d/dd1fd2ab-2565-4798-a832-fc849df82f74.jpg?1785323319"
+   "image_small": "https://cards.scryfall.io/small/front/d/d/dd1fd2ab-2565-4798-a832-fc849df82f74.jpg?1785323319",
+   "produced_mana": []
   },
   {
    "id": 1113693,
@@ -3236,7 +3257,11 @@
    "tier": 2,
    "pick_gap": 0.15,
    "image": "https://cards.scryfall.io/normal/front/c/d/cd477096-41b1-4907-9cb3-852cb22c9ba2.jpg?1785323590",
-   "image_small": "https://cards.scryfall.io/small/front/c/d/cd477096-41b1-4907-9cb3-852cb22c9ba2.jpg?1785323590"
+   "image_small": "https://cards.scryfall.io/small/front/c/d/cd477096-41b1-4907-9cb3-852cb22c9ba2.jpg?1785323590",
+   "produced_mana": [
+    "G",
+    "U"
+   ]
   },
   {
    "id": 1113411,
@@ -4493,7 +4518,10 @@
    "is_land": true,
    "is_basic": true,
    "image": "https://cards.scryfall.io/normal/front/c/3/c3e84b42-5423-4d4d-b8fc-cfbb2c53a4ca.jpg?1785323365",
-   "image_small": "https://cards.scryfall.io/small/front/c/3/c3e84b42-5423-4d4d-b8fc-cfbb2c53a4ca.jpg?1785323365"
+   "image_small": "https://cards.scryfall.io/small/front/c/3/c3e84b42-5423-4d4d-b8fc-cfbb2c53a4ca.jpg?1785323365",
+   "produced_mana": [
+    "G"
+   ]
   },
   {
    "id": "basic-HOB-Island",
@@ -4515,7 +4543,10 @@
    "is_land": true,
    "is_basic": true,
    "image": "https://cards.scryfall.io/normal/front/c/6/c6aa89a8-3584-4906-b9a9-41ef2f021f8e.jpg?1785323353",
-   "image_small": "https://cards.scryfall.io/small/front/c/6/c6aa89a8-3584-4906-b9a9-41ef2f021f8e.jpg?1785323353"
+   "image_small": "https://cards.scryfall.io/small/front/c/6/c6aa89a8-3584-4906-b9a9-41ef2f021f8e.jpg?1785323353",
+   "produced_mana": [
+    "U"
+   ]
   },
   {
    "id": "basic-HOB-Mountain",
@@ -4537,7 +4568,10 @@
    "is_land": true,
    "is_basic": true,
    "image": "https://cards.scryfall.io/normal/front/c/4/c49d378e-9549-4320-b3c6-1aeb216d1e98.jpg?1785323363",
-   "image_small": "https://cards.scryfall.io/small/front/c/4/c49d378e-9549-4320-b3c6-1aeb216d1e98.jpg?1785323363"
+   "image_small": "https://cards.scryfall.io/small/front/c/4/c49d378e-9549-4320-b3c6-1aeb216d1e98.jpg?1785323363",
+   "produced_mana": [
+    "R"
+   ]
   },
   {
    "id": "basic-HOB-Plains",
@@ -4559,7 +4593,10 @@
    "is_land": true,
    "is_basic": true,
    "image": "https://cards.scryfall.io/normal/front/7/b/7b7c408b-8660-4db5-9a16-5003c11b4ac1.jpg?1785323349",
-   "image_small": "https://cards.scryfall.io/small/front/7/b/7b7c408b-8660-4db5-9a16-5003c11b4ac1.jpg?1785323349"
+   "image_small": "https://cards.scryfall.io/small/front/7/b/7b7c408b-8660-4db5-9a16-5003c11b4ac1.jpg?1785323349",
+   "produced_mana": [
+    "W"
+   ]
   },
   {
    "id": "basic-HOB-Swamp",
@@ -4581,7 +4618,10 @@
    "is_land": true,
    "is_basic": true,
    "image": "https://cards.scryfall.io/normal/front/4/0/4031e5e4-e573-4130-8d20-4a606edef0a0.jpg?1785323357",
-   "image_small": "https://cards.scryfall.io/small/front/4/0/4031e5e4-e573-4130-8d20-4a606edef0a0.jpg?1785323357"
+   "image_small": "https://cards.scryfall.io/small/front/4/0/4031e5e4-e573-4130-8d20-4a606edef0a0.jpg?1785323357",
+   "produced_mana": [
+    "B"
+   ]
   }
  ]
 }

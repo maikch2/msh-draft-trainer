@@ -418,7 +418,7 @@ def diff_report(cards, old, top=25):
 # Optional: enrich with Scryfall card images (one batched request per set).
 # --------------------------------------------------------------------------
 def fetch_scryfall_set(set_code):
-    """Return {card_name: {image, image_small, type_line, is_land, is_basic}}."""
+    """Return Scryfall images, land flags, and produced mana indexed by name."""
     out = {}
     url = (f"https://api.scryfall.com/cards/search?"
            f"q=set%3A{set_code.lower()}&unique=cards&order=set")
@@ -436,6 +436,7 @@ def fetch_scryfall_set(set_code):
                 "is_land": "Land" in tl,
                 "is_basic": "Basic" in tl,
                 "rarity": c.get("rarity"),
+                "produced_mana": c.get("produced_mana", []),
             }
             out[c["name"]] = entry
             out[c["name"].split(" // ")[0]] = entry   # also index front-face name
@@ -461,6 +462,8 @@ def attach_images(cards):
         c["image_small"] = info.get("image_small") if info else None
         c["is_land"] = bool(info and info.get("is_land")) or c.get("is_land", False)
         c["is_basic"] = bool(info and info.get("is_basic"))
+        if info and c["is_land"]:
+            c["produced_mana"] = info["produced_mana"]
         matched += bool(info)
     misses = [c["name"] for c in cards if not c.get("image")]
     print(f"  matched images for {matched}/{len(cards)} cards")
@@ -484,6 +487,7 @@ def basic_lands_from(cache, set_code):
             "score": None, "tier": None,
             "alsa": None, "ata": None, "pick_gap": None,
             "is_land": True, "is_basic": True,
+            "produced_mana": e.get("produced_mana", []),
             "image": e.get("image"), "image_small": e.get("image_small"),
         })
     return sorted(out, key=lambda c: c["name"])
@@ -592,7 +596,7 @@ def main():
         for card in cards:
             if not card.get("image"):
                 prior = previous.get(card["id"], {})
-                for key in ("image", "image_small", "is_land", "is_basic"):
+                for key in ("image", "image_small", "is_land", "is_basic", "produced_mana"):
                     if key in prior:
                         card[key] = prior[key]
         if not any(c.get("image") for c in cards if c["set"] == cfg["code"]):

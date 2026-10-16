@@ -19,6 +19,19 @@ def page(stats=None, rows=None):
 
 
 class FetchTests(unittest.TestCase):
+    def test_scryfall_mana_production_survives_land_enrichment(self):
+        source = {"data": [
+            {"name": "Dual", "type_line": "Land", "colors": [], "produced_mana": ["U", "B"]},
+            {"name": "No mana", "type_line": "Land"},
+            {"name": "Island", "type_line": "Basic Land — Island", "produced_mana": ["U"]},
+        ]}
+        cards = [{"name": name, "set": "FRA"} for name in ["Dual", "No mana"]]
+        with patch.object(fetcher, "fetch", return_value=json.dumps(source)):
+            cache = fetcher.attach_images(cards)
+        self.assertEqual(cards[0]["produced_mana"], ["U", "B"])
+        self.assertEqual(cards[1]["produced_mana"], [])
+        self.assertEqual(fetcher.basic_lands_from(cache, "FRA")[0]["produced_mana"], ["U"])
+
     def test_unreleased_set_is_waiting(self):
         with patch.object(fetcher, "fetch", return_value=page()):
             cards, _ = fetcher.try_untapped(fetcher.SETS["fra"], strict=True)
