@@ -207,7 +207,10 @@ before driving. The page requests a screen wake lock when the browser supports i
 Voice uses a persistent OpenAI Realtime connection with `gpt-realtime-2.1-mini`.
 The browser selects cards with `drill_sampling.js` and grades against the same
 unrounded scores as typed Drill. The model interprets speech and reads a supplied
-sentence; it does not calculate grades or choose cards. The page shows measured
+sentence; it does not calculate grades or choose cards. Input interpretation must
+return a grading or control command and cannot speak. The app then supplies the
+exact feedback and next question for a separate spoken response. Unclear answers
+prompt a request to repeat the rating. The page shows measured
 response latency, starting when the service detects the end of speech. Actual
 phone and Bluetooth latency depends on the network and audio route.
 

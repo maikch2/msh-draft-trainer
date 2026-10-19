@@ -1438,7 +1438,10 @@
    "rarity": "common",
    "mana_value": 2,
    "cost": "{1}{(U/R)}",
-   "colors": [],
+   "colors": [
+    "R",
+    "U"
+   ],
    "total_games": 150730,
    "games": 84317,
    "win_rate": 0.5627,
@@ -2254,7 +2257,10 @@
    "rarity": "common",
    "mana_value": 2,
    "cost": "{1}{(G/U)}",
-   "colors": [],
+   "colors": [
+    "G",
+    "U"
+   ],
    "total_games": 87701,
    "games": 45015,
    "win_rate": 0.5466,
@@ -2370,7 +2376,10 @@
    "rarity": "uncommon",
    "mana_value": 2,
    "cost": "{1}{(G/W)}",
-   "colors": [],
+   "colors": [
+    "G",
+    "W"
+   ],
    "total_games": 95474,
    "games": 46577,
    "win_rate": 0.5454,
@@ -2855,7 +2864,10 @@
    "rarity": "common",
    "mana_value": 2,
    "cost": "{1}{(W/U)}",
-   "colors": [],
+   "colors": [
+    "U",
+    "W"
+   ],
    "total_games": 203831,
    "games": 112932,
    "win_rate": 0.5407,
@@ -3142,7 +3154,10 @@
    "rarity": "uncommon",
    "mana_value": 3,
    "cost": "{1}{(W/U)}{(W/U)}",
-   "colors": [],
+   "colors": [
+    "U",
+    "W"
+   ],
    "total_games": 92452,
    "games": 49092,
    "win_rate": 0.5362,
@@ -3648,7 +3663,10 @@
    "rarity": "common",
    "mana_value": 1,
    "cost": "{(W/B)}",
-   "colors": [],
+   "colors": [
+    "B",
+    "W"
+   ],
    "total_games": 85543,
    "games": 42294,
    "win_rate": 0.5308,
@@ -3969,7 +3987,10 @@
    "rarity": "uncommon",
    "mana_value": 2,
    "cost": "{1}{(U/B)}",
-   "colors": [],
+   "colors": [
+    "B",
+    "U"
+   ],
    "total_games": 43541,
    "games": 23308,
    "win_rate": 0.5277,
@@ -4017,7 +4038,10 @@
    "rarity": "common",
    "mana_value": 3,
    "cost": "{2}{(U/B)}",
-   "colors": [],
+   "colors": [
+    "B",
+    "U"
+   ],
    "total_games": 52031,
    "games": 29085,
    "win_rate": 0.5272,
@@ -4087,7 +4111,10 @@
    "rarity": "uncommon",
    "mana_value": 1,
    "cost": "{(B/R)}",
-   "colors": [],
+   "colors": [
+    "B",
+    "R"
+   ],
    "total_games": 68702,
    "games": 33776,
    "win_rate": 0.5259,
@@ -4546,7 +4573,10 @@
    "rarity": "common",
    "mana_value": 2,
    "cost": "{1}{(R/G)}",
-   "colors": [],
+   "colors": [
+    "G",
+    "R"
+   ],
    "total_games": 161853,
    "games": 83051,
    "win_rate": 0.5188,
@@ -4665,7 +4695,10 @@
    "rarity": "common",
    "mana_value": 1,
    "cost": "{(G/W)}",
-   "colors": [],
+   "colors": [
+    "G",
+    "W"
+   ],
    "total_games": 124443,
    "games": 62805,
    "win_rate": 0.5172,
@@ -5225,7 +5258,10 @@
    "rarity": "common",
    "mana_value": 2,
    "cost": "{1}{(B/G)}",
-   "colors": [],
+   "colors": [
+    "B",
+    "G"
+   ],
    "total_games": 78958,
    "games": 36302,
    "win_rate": 0.5115,
@@ -5729,7 +5765,10 @@
    "rarity": "uncommon",
    "mana_value": 3,
    "cost": "{2}{(R/G)}",
-   "colors": [],
+   "colors": [
+    "G",
+    "R"
+   ],
    "total_games": 80434,
    "games": 37965,
    "win_rate": 0.5045,
@@ -6085,7 +6124,10 @@
    "rarity": "common",
    "mana_value": 3,
    "cost": "{2}{(R/W)}",
-   "colors": [],
+   "colors": [
+    "R",
+    "W"
+   ],
    "total_games": 20936,
    "games": 8798,
    "win_rate": 0.4964,
@@ -6131,7 +6173,13 @@
    "rarity": "rare",
    "mana_value": 10,
    "cost": "{(2/W)}{(2/U)}{(2/B)}{(2/R)}{(2/G)}",
-   "colors": [],
+   "colors": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
    "total_games": 2487,
    "games": 1094,
    "win_rate": 0.4954,
@@ -6372,7 +6420,10 @@
    "rarity": "common",
    "mana_value": 4,
    "cost": "{3}{(B/R)}",
-   "colors": [],
+   "colors": [
+    "B",
+    "R"
+   ],
    "total_games": 46901,
    "games": 21922,
    "win_rate": 0.4891,

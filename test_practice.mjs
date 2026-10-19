@@ -55,3 +55,14 @@ test('land prompts use produced mana rather than card colors or color identity',
   assert.match(core.question({...land,produced_mana:undefined},'q1').spoken_prompt,/Mana production unavailable/);
   assert.equal(core.question({name:'Spell',colors:['U'],cost:'{1}{U}'},'q1').spoken_prompt,'Spell. blue. 1 generic, one blue. Your rating?');
 });
+test('published hybrid cards have colors and speak hybrid mana alternatives',()=>{
+  for(const file of ['cards.json','cards_hob.json','cards_fra.json']) {
+    for(const card of JSON.parse(readFileSync(file,'utf8')).cards.filter(c=>c.cost.includes('/'))) {
+      const expected=[...new Set(card.cost.match(/[WUBRG]/g) || [])].sort();
+      assert.deepEqual(card.colors,expected,card.name);
+      const q=core.question(card,'q1');
+      assert.notEqual(q.colors,'colorless',card.name);
+      assert.match(q.spoken_prompt,/ or /,card.name);
+    }
+  }
+});

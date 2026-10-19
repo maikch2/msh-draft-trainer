@@ -19,6 +19,11 @@ def page(stats=None, rows=None):
 
 
 class FetchTests(unittest.TestCase):
+    def test_hybrid_pips_contribute_all_their_colors(self):
+        self.assertEqual(fetcher.parse_cost("o1o(G/W)"), {"text": "{1}{(G/W)}", "colors": ["G", "W"]})
+        self.assertEqual(fetcher.parse_cost("oUo(W/B)o(2/R)o(G/P)")["colors"], ["B", "G", "R", "U", "W"])
+        self.assertEqual(fetcher.parse_cost("oXo3oC")["colors"], [])
+
     def test_scryfall_mana_production_survives_land_enrichment(self):
         source = {"data": [
             {"name": "Dual", "type_line": "Land", "colors": [], "produced_mana": ["U", "B"]},

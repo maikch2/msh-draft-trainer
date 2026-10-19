@@ -69,6 +69,18 @@
     const error = Math.abs(guess - card.score);
     return {guess:guess.toFixed(1), rating:card.score.toFixed(1), error:error.toFixed(1), rawError:error};
   }
+  function scriptResponse(text) {
+    return {type:"response.create",response:{
+      conversation:"none", metadata:{phase:"script"}, input:[],
+      output_modalities:["audio"], tool_choice:"none",
+      instructions:"Read the following script verbatim in English. Do not add, omit, or replace any words. Read ratings and errors to one decimal place, including trailing zero. Then be silent. Script: "+text
+    }};
+  }
+  function questionContext(question, paused = false) {
+    return {type:"conversation.item.create",item:{type:"message",role:"system",content:[{
+      type:"input_text",text:"Current drill state (replaces all earlier question state): "+JSON.stringify({current_question:question,paused})+". Use this question token for the next answer, even if the spoken rating repeats the previous rating."
+    }]}};
+  }
   function createRound(card, token) {
     let submitted = false;
     return {question:question(card, token), submit(guess, suppliedToken) {
@@ -78,5 +90,5 @@
       return result;
     }};
   }
-  return {cleanHistory, validEvent, applyEvent, replay, question, grade, createRound};
+  return {cleanHistory, validEvent, applyEvent, replay, question, grade, createRound, scriptResponse, questionContext};
 });

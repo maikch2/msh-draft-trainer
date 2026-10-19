@@ -157,13 +157,14 @@
         case "resume": setPaused(v,false); return {current_question:v.round.question};
         case "skip": return v.paused ? {paused:true} : {next_question:next(v)};
         case "repeat": return {current_question:v.round.question,paused:v.paused};
+        case "clarify": return {error:"Please repeat your rating for this card, from one to five.",current_question:v.round.question};
         default: return {error:"Unknown command."};
       }
     } catch(error) {return {error:error.message,current_question:v.round.question};}
   }
   function handle(v,event) {
     if(voice!==v) return;
-    if(event.type==="input_audio_buffer.speech_started") {info("Listening…"); v.speechEnd=null;}
+    if(event.type==="input_audio_buffer.speech_started") {cancelSpeech(v); info("Listening…"); v.speechEnd=null; v.decisionRetried=false;}
     if(event.type==="input_audio_buffer.speech_stopped") {v.speechEnd=performance.now(); info("Checking…");}
     if(event.type==="output_audio_buffer.started") {
       info(v.paused?"Paused":"Speaking…");
@@ -175,8 +176,30 @@
     }
     if(event.type==="output_audio_buffer.stopped") info(v.paused?"Paused. Say resume to continue.":"Listening…");
     if(event.type==="response.output_audio_transcript.done") $("voice-transcript").textContent=event.transcript;
+    if(event.type==="response.created" && event.response?.metadata?.phase==="script") v.scriptResponseId=event.response.id;
     if(event.type==="response.done") {
+      if(event.response?.id) {
+        if(v.responses.has(event.response.id)) return;
+        v.responses.add(event.response.id);
+      }
+      const isScript=event.response?.metadata?.phase==="script";
+      if(isScript && v.scriptResponseId===event.response.id) v.scriptResponseId=null;
+      if(event.response?.status==="cancelled") return;
+      if(event.response?.status==="failed") {stopVoice("Voice response failed. Start voice to reconnect."); return;}
+      if(isScript) {
+        if(event.response.status!=="completed") stopVoice("Voice reply was interrupted. Start voice to reconnect.");
+        return;
+      }
       const calls=(event.response?.output||[]).filter(item=>item.type==="function_call");
+      if(!calls.length || event.response?.status!=="completed") {
+        // Never silently accept an acknowledgement such as "noted" as a grade.
+        if(!v.decisionRetried) {
+          v.decisionRetried=true;
+          send(v,{type:"response.create",response:{output_modalities:["text"],tool_choice:"required"}});
+        } else speak(v,"Please repeat your rating for this card, from one to five.");
+        return;
+      }
+      v.decisionRetried=false;
       let speech="", handled=false;
       for(const call of calls) {
         if(v.calls.has(call.call_id)) continue;
@@ -193,7 +216,6 @@
         send(v,{type:"conversation.item.create",item:{type:"function_call_output",call_id:call.call_id,output:JSON.stringify(output)}});
       }
       if(speech && voice===v) speak(v,speech);
-      if(event.response?.status==="failed") stopVoice("Voice response failed. Start voice to reconnect.");
     }
     if(event.type==="error") {
       if(["response_cancel_not_active","conversation_already_has_active_response"].includes(event.error?.code)) return;
@@ -201,14 +223,19 @@
     }
   }
   function speak(v,text) {
-    send(v,{type:"response.create",response:{tool_choice:"none",instructions:"Speak exactly the following text in English. Do not omit any part or add any other words. Read ratings and errors to one decimal place. Then be silent. Text: "+text}});
+    send(v,core.questionContext(v.round.question,v.paused));
+    send(v,core.scriptResponse(text));
+  }
+  function cancelSpeech(v) {
+    if(v.scriptResponseId) send(v,{type:"response.cancel",response_id:v.scriptResponseId});
+    send(v,{type:"output_audio_buffer.clear"});
   }
   $("voice-stop").onclick=()=>stopVoice();
   $("voice-pause").onclick=()=>{
     const v=voice; if(!v) return;
     setPaused(v,!v.paused);
+    cancelSpeech(v);
     send(v,{type:"response.cancel"});
-    send(v,{type:"output_audio_buffer.clear"});
     send(v,{type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:v.paused?"I pressed pause. Pause the drill.":"I pressed resume. Read the current question again."}]}});
     send(v,{type:"response.create"});
   };
@@ -218,7 +245,7 @@
     if(!signedIn) {status(syncMessage); $("practice-signin").focus(); return;}
     if(trainer.cards.length<2) {status("This set needs at least two rated cards for voice practice."); return;}
     if(!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {status("Voice needs Safari or another browser with microphone access over HTTPS."); return;}
-    const v={abort:new AbortController(),calls:new Set(),latencies:[],audio:document.createElement("audio"),paused:false};
+    const v={abort:new AbortController(),calls:new Set(),responses:new Set(),latencies:[],audio:document.createElement("audio"),paused:false};
     voice=v;
     v.audio.autoplay=true; v.audio.setAttribute("playsinline",""); document.body.append(v.audio);
     $("voice-start").disabled=true;

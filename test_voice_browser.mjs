@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {webcrypto} from 'node:crypto';
+import {sessionConfig} from './api/voice-session.mjs';
 const require=createRequire(import.meta.url), core=require('./practice_core.js'), sampler=require('./drill_sampling.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function browser() {
@@ -47,6 +48,9 @@ test('voice records one answer, speaks feedback plus the next card, and stops th
   assert.equal(b.records.length,1);
   const response=b.sent.filter(e=>e.type==='response.create').at(-1);
   assert.equal(response.response.tool_choice,'none');
+  assert.deepEqual(response.response.output_modalities,['audio']);
+  assert.equal(response.response.conversation,'none');
+  assert.deepEqual(response.response.input,[]);
   assert.match(response.response.instructions,/Rated .*off by .*Your rating/);
   b.event({type:'response.done',response:{status:'completed',output:[call]}});
   b.event({type:'response.done',response:{status:'completed',output:[{...call,call_id:'retry'}]}});
@@ -59,4 +63,44 @@ test('pause rejects answers and changing sets closes voice',async()=>{
   b.event({type:'response.done',response:{status:'completed',output:[{type:'function_call',name:'submit_answer',call_id:'paused',arguments:'{"guess":3.7,"token":"q1"}'}]}});
   assert.equal(b.records.length,0);
   b.dispatch('practice-set-changing');assert.equal(b.stopped,true);
+});
+test('automatic turns must select a tool and cannot emit spoken acknowledgements',()=>{
+  assert.equal(sessionConfig.tool_choice,'required');
+  assert.deepEqual(sessionConfig.output_modalities,['text']);
+  assert(sessionConfig.tools.find(t=>t.name==='drill_control').parameters.properties.action.enum.includes('clarify'));
+});
+test('a bare acknowledgement retries interpretation then asks for clarification without grading',async()=>{
+  const b=browser();await tick();await b.el('voice-start').onclick();
+  const acknowledgement={status:'completed',output:[{type:'message',content:[{type:'output_text',text:'Noted.'}]}]};
+  b.event({type:'response.done',response:{id:'no-tool-1',...acknowledgement}});
+  const retry=b.sent.at(-1).response;
+  assert.equal(retry.tool_choice,'required');assert.deepEqual(retry.output_modalities,['text']);
+  const count=b.sent.length;
+  b.event({type:'response.done',response:{id:'no-tool-1',...acknowledgement}});
+  assert.equal(b.sent.length,count,'Duplicate response events must not trigger retries');
+  b.event({type:'response.done',response:{id:'no-tool-2',...acknowledgement}});
+  assert.match(b.sent.at(-1).response.instructions,/Please repeat your rating/);
+  assert.equal(b.records.length,0);
+  b.event({type:'response.done',response:{id:'script1',status:'completed',metadata:{phase:'script'},output:[]}});
+  assert.equal(b.sent.length,count+2,'Spoken scripts must not trigger interpretation retries');
+});
+test('each spoken question makes its current token explicit for repeated ratings',async()=>{
+  const b=browser();await tick();await b.el('voice-start').onclick();
+  for(let round=1;round<=3;round++) {
+    const context=b.sent.filter(e=>e.item?.role==='system').at(-1);
+    assert.match(context.item.content[0].text,new RegExp('"token":"q'+round+'"'));
+    b.event({type:'response.done',response:{id:'answer'+round,status:'completed',output:[{
+      type:'function_call',name:'submit_answer',call_id:'call'+round,arguments:JSON.stringify({guess:3.7,token:'q'+round})
+    }]}});
+    assert.equal(b.records.length,round);
+    assert.match(b.sent.at(-1).response.instructions,/Rated .*off by .*Your rating/);
+  }
+});
+test('cancelled tool calls do not record an answer; speech interruption cancels only the script',async()=>{
+  const b=browser();await tick();await b.el('voice-start').onclick();
+  b.event({type:'response.done',response:{status:'cancelled',output:[{type:'function_call',name:'submit_answer',call_id:'cancelled',arguments:'{"guess":3.7,"token":"q1"}'}]}});
+  assert.equal(b.records.length,0);
+  b.event({type:'response.created',response:{id:'speaking',metadata:{phase:'script'}}});
+  b.event({type:'input_audio_buffer.speech_started'});
+  assert(b.sent.some(e=>e.type==='response.cancel' && e.response_id==='speaking'));
 });

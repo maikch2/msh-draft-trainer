@@ -106,7 +106,8 @@ def parse_cost(cost):
     if not cost:
         return {"text": "", "colors": []}
     pips = [p for p in cost.split("o") if p]
-    colors = sorted({COLORS[p] for p in pips if p in COLORS})
+    # Arena wraps hybrid pips, e.g. o(W/U), o(2/B), and o(G/P).
+    colors = sorted({symbol for pip in pips for symbol in re.findall(r"[WUBRG]", pip)})
     return {"text": "".join("{%s}" % p for p in pips), "colors": colors}
 
 
