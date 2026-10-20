@@ -110,7 +110,7 @@
     v.roundNumber=(v.roundNumber || 0)+1;
     v.round=core.createRound(v.card,"q"+v.roundNumber);
     const q=v.round.question;
-    $("voice-question").textContent=q.name+" · "+(q.mana_description ? "Land · "+q.mana_description : q.colors+" · "+q.mana_cost);
+    $("voice-question").textContent=q.name+" · "+q.rarity+" · "+(q.mana_description ? "Land · "+q.mana_description : q.colors+" · "+q.mana_cost);
     return q;
   }
   async function wake(v) {
@@ -147,8 +147,8 @@
         if(v.paused) return {paused:true, instruction:"Say resume to continue."};
         const result=v.round.submit(args.guess,args.token);
         trainer.record(v.card,result.rawError);
-        $("voice-result").textContent=v.card.name+": you "+result.guess+", rated "+result.rating+", off by "+result.error+".";
-        return {rating:result.rating,error:result.error,next_question:next(v)};
+        $("voice-result").textContent=(result.spotOn ? "Spot on! " : "")+v.card.name+": you "+result.guess+", rated "+result.rating+", off by "+result.error+".";
+        return {rating:result.rating,error:result.error,spotOn:result.spotOn,next_question:next(v)};
       }
       if(item.name!=="drill_control") return {error:"Unknown command."};
       switch(args.action) {
@@ -208,7 +208,7 @@
         if(voice!==v) return;
         if(!handled) {
           const q=output.next_question || output.current_question;
-          speech=output.rating ? "Rated "+output.rating+", off by "+output.error+". "+q.spoken_prompt
+          speech=output.rating ? (output.spotOn ? "Spot on! Rated "+output.rating+". " : "Rated "+output.rating+", off by "+output.error+". ")+q.spoken_prompt
             : output.paused ? "Paused. Say resume when ready."
             : (output.error ? output.error+" " : "") + (q?.spoken_prompt || "Please repeat your rating.");
         }

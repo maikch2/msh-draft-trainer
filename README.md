@@ -194,12 +194,14 @@ ChatGPT account, then select **Start voice** and allow the microphone. Use this
 signed-in page for both typed and spoken practice on every device. The original
 GitHub Pages page continues to keep its own local history.
 
-The drill reads the card name, colors and mana cost. For lands, it instead reads
+The drill reads the card name, rarity, colors and mana cost. For lands, it instead reads
 the mana types the land can produce, using Scryfall's `produced_mana` data (including
 colorless and any-color mana). Lands without a mana ability are identified as not
 producing mana directly. This describes possible mana types, not activation costs
 or spending restrictions. Say a rating from 1 to 5;
 it speaks the rating and absolute error to one decimal, then reads the next card.
+If your answer matches the rating rounded to one decimal, it says "Spot on!"
+and confirms the rating. Mistake history still uses the original unrounded score.
 Commands: **repeat**, **skip**, **pause**, **resume**, **stop**. Keep Safari open;
 screen-lock playback is not supported. Select Bluetooth audio and start the session
 before driving. The page requests a screen wake lock when the browser supports it.

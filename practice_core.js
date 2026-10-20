@@ -43,6 +43,8 @@
   }
   function question(card, token) {
     const names = {W:"white", U:"blue", B:"black", R:"red", G:"green"};
+    const rarity = {common:"common",uncommon:"uncommon",rare:"rare",mythic:"mythic rare",basic:"basic",special:"special"}[card.rarity] || "rarity unavailable";
+    const intro = card.name+". "+rarity+". ";
     const colors=(card.colors || []).map(c => names[c] || c).join(" and ") || "colorless";
     if (card.is_land) {
       // Card color and color identity do not tell us which mana a land makes.
@@ -55,19 +57,20 @@
           description=mana.includes("C") ? "Can produce colorless mana or mana of any color." : "Can produce mana of any color.";
         } else description="Can produce "+types.join(" or ")+" mana.";
       }
-      return {token, name:card.name, colors, mana_cost:card.cost || "no mana cost", produced_mana:mana,
-        mana_description:description, spoken_prompt:card.name+". Land. "+description+" Your rating?"};
+      return {token, name:card.name, rarity, colors, mana_cost:card.cost || "no mana cost", produced_mana:mana,
+        mana_description:description, spoken_prompt:intro+"Land. "+description+" Your rating?"};
     }
     const symbols=(card.cost || "").match(/\{[^}]+\}/g) || [];
     const spokenCost=symbols.map(s=>s.replace(/[{}()]/g,"").split("/").map(part=>
       names[part] ? "one "+names[part] : /^\d+$/.test(part) ? part+" generic" : ({C:"one colorless",X:"X generic",S:"one snow",P:"two life"}[part] || part)
     ).join(" or ")).join(", ") || "no mana cost";
-    return {token, name:card.name, colors, mana_cost:card.cost || "no mana cost", spoken_prompt:card.name+". "+colors+". "+spokenCost+". Your rating?"};
+    return {token, name:card.name, rarity, colors, mana_cost:card.cost || "no mana cost", spoken_prompt:intro+colors+". "+spokenCost+". Your rating?"};
   }
   function grade(card, guess) {
     if (!Number.isFinite(guess) || guess < 1 || guess > 5 || !Number.isFinite(card?.score)) throw new Error("Say a rating between one and five");
     const error = Math.abs(guess - card.score);
-    return {guess:guess.toFixed(1), rating:card.score.toFixed(1), error:error.toFixed(1), rawError:error};
+    const rating=card.score.toFixed(1);
+    return {guess:guess.toFixed(1), rating, error:error.toFixed(1), rawError:error, spotOn:guess===Number(rating)};
   }
   function scriptResponse(text) {
     return {type:"response.create",response:{

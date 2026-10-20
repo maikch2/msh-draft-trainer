@@ -52,10 +52,26 @@ test('voice records one answer, speaks feedback plus the next card, and stops th
   assert.equal(response.response.conversation,'none');
   assert.deepEqual(response.response.input,[]);
   assert.match(response.response.instructions,/Rated .*off by .*Your rating/);
+  assert.doesNotMatch(response.response.instructions,/Spot on/);
   b.event({type:'response.done',response:{status:'completed',output:[call]}});
   b.event({type:'response.done',response:{status:'completed',output:[{...call,call_id:'retry'}]}});
   assert.equal(b.records.length,1,'Duplicate calls and stale question tokens must not grade the next card');
   b.el('voice-stop').onclick();assert.equal(b.stopped,true);
+});
+test('rounded matches speak Spot on, confirm the rating and ask the next card with rarity',async()=>{
+  const b=browser();await tick();await b.el('voice-start').onclick();
+  const intro=b.sent.find(e=>e.item?.role==='user');
+  const q=JSON.parse(intro.item.content[0].text.split('Current question: ')[1]);
+  const card=b.window.TRAINER.cards.find(c=>c.name===q.name);
+  assert.match(b.sent.at(-1).response.instructions,/common/);
+  const guess=Number(card.score.toFixed(1));
+  b.event({type:'response.done',response:{id:'match',status:'completed',output:[{
+    type:'function_call',name:'submit_answer',call_id:'match',arguments:JSON.stringify({guess,token:q.token})
+  }]}});
+  assert.match(b.sent.at(-1).response.instructions,/Spot on! Rated \d\.\d\. .*common.*Your rating/);
+  assert.equal(b.records.length,1);
+  assert.equal(b.records[0].error,Math.abs(guess-card.score));
+  assert.match(b.el('voice-result').textContent,/Spot on!/);
 });
 test('pause rejects answers and changing sets closes voice',async()=>{
   const b=browser();await tick();await b.el('voice-start').onclick();

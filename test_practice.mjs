@@ -46,14 +46,32 @@ test('both trainer pages and browser modules are valid JavaScript',()=>{
   new vm.Script(readFileSync('voice_drill.js','utf8'));
 });
 test('land prompts use produced mana rather than card colors or color identity',()=>{
-  const land={name:'Shipwreck Marsh',is_land:true,colors:[],color_identity:['R'],cost:'',produced_mana:['U','B']};
-  assert.equal(core.question(land,'q1').spoken_prompt,'Shipwreck Marsh. Land. Can produce blue or black mana. Your rating?');
+  const land={name:'Shipwreck Marsh',rarity:'rare',is_land:true,colors:[],color_identity:['R'],cost:'',produced_mana:['U','B']};
+  assert.equal(core.question(land,'q1').spoken_prompt,'Shipwreck Marsh. rare. Land. Can produce blue or black mana. Your rating?');
   assert.match(core.question({...land,produced_mana:['C']},'q1').spoken_prompt,/Can produce colorless mana/);
   assert.match(core.question({...land,produced_mana:['W','U','B','R','G']},'q1').spoken_prompt,/mana of any color/);
   assert.match(core.question({...land,produced_mana:['W','U','B','R','G','C']},'q1').spoken_prompt,/colorless mana or mana of any color/);
   assert.match(core.question({...land,produced_mana:[]},'q1').spoken_prompt,/Does not produce mana directly/);
   assert.match(core.question({...land,produced_mana:undefined},'q1').spoken_prompt,/Mana production unavailable/);
-  assert.equal(core.question({name:'Spell',colors:['U'],cost:'{1}{U}'},'q1').spoken_prompt,'Spell. blue. 1 generic, one blue. Your rating?');
+  assert.equal(core.question({name:'Spell',rarity:'common',colors:['U'],cost:'{1}{U}'},'q1').spoken_prompt,'Spell. common. blue. 1 generic, one blue. Your rating?');
+});
+test('questions include rarity without revealing the score',()=>{
+  for(const [rarity,spoken] of Object.entries({common:'common',uncommon:'uncommon',rare:'rare',mythic:'mythic rare',basic:'basic',special:'special'})) {
+    const q=core.question({name:'Test',rarity,score:4.123,colors:['R'],cost:'{R}'},'q1');
+    assert.equal(q.rarity,spoken);
+    assert(q.spoken_prompt.startsWith('Test. '+spoken+'. '));
+    assert(!JSON.stringify(q).includes('4.123'));
+  }
+});
+test('spot on uses the displayed one-decimal score and preserves the original error',()=>{
+  for(const [score,guess] of [[3.249,3.2],[3.251,3.3],[4,4],[4.999,5],[1.001,1]]) {
+    const grade=core.grade({score},guess);
+    assert.equal(grade.spotOn,true);
+    assert.equal(grade.rawError,Math.abs(guess-score));
+  }
+  assert.equal(core.grade({score:3.249},3.3).spotOn,false);
+  assert.equal(core.grade({score:3.251},3.2).spotOn,false);
+  assert.equal(core.grade({score:3.251},3.251).spotOn,false,'Extra precision does not match the requested one-decimal answer');
 });
 test('published hybrid cards have colors and speak hybrid mana alternatives',()=>{
   for(const file of ['cards.json','cards_hob.json','cards_fra.json']) {
