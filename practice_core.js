@@ -16,7 +16,7 @@
     return result;
   }
   function validEvent(e) {
-    if (!e || !validId(e.id) || !["MSH", "HOB", "FRA"].includes(e.set)) return false;
+    if (!e || !validId(e.id) || !["MSH", "HOB", "FRA", "TRK"].includes(e.set)) return false;
     if (e.kind === "reset") return true;
     if (e.kind === "import") return e.history && typeof e.history === "object" && !Array.isArray(e.history);
     return e.kind === "answer" && validId(e.cardId) && !["__proto__", "constructor", "prototype"].includes(e.cardId) &&

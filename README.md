@@ -1,8 +1,8 @@
-# Draft Rating Trainer (MSH + HOB + FRA)
+# Draft Rating Trainer (MSH + HOB + FRA + TRK)
 
-Open a simulated booster — **Marvel Super Heroes (MSH)**, **The Hobbit (HOB)**, or **Reality Fracture (FRA)** —
+Open a simulated booster — **Marvel Super Heroes (MSH)**, **The Hobbit (HOB)**, **Reality Fracture (FRA)**, or **Star Trek (TRK)** —
 on Magic: the Gathering Arena and guess each card's power rating (1–5). Switch
-sets with the **MSH | HOB | FRA** toggle in the page header (the choice is remembered,
+sets with the **MSH | HOB | FRA | TRK** toggle in the page header (the choice is remembered,
 and `#hob/study`-style links deep-link to a set + view).
 
 Ratings come from the card's real **In-Hand Win Rate** scraped from
@@ -11,16 +11,20 @@ For sets untapped doesn't cover yet (brand-new releases like HOB),
 `fetch_cards.py` automatically falls back to
 [draftsim](https://draftsim.com/HOB-pick-order/)'s expert 0–5 ratings — and
 switches itself back to untapped win rates on the first refresh after the set
-has real draft data.
+has real draft data. Star Trek always uses Untapped; unavailable data never falls back to expert ratings.
 
 ## Files
 
 | File | What it is |
 |------|------------|
-| `fetch_cards.py` | Downloads the card data for one set (`--set msh` / `--set hob` / `--set fra`), maps its rating metric to a 1–5 score, and writes the set's `cards*.json` + `cards*.js`. Also pulls card images from Scryfall. |
+| `fetch_cards.py` | Downloads the card data for one set (`--set msh` / `--set hob` / `--set fra` / `--set trk`), maps its rating metric to a 1–5 score, and writes the set's `cards*.json` + `cards*.js`. Also pulls card images from Scryfall. |
 | `cards.json` / `cards.js` | MSH data — name, set, rarity, mana cost, win rate, score and image for every card. `cards.js` is the same data wrapped so the page works when opened directly. |
 | `cards_hob.json` / `cards_hob.js` | Same, for The Hobbit. |
 | `cards_fra.json` / `cards_fra.js` | Same, for Reality Fracture. |
+| `cards_trk.json` / `cards_trk.js` | Star Trek and imported Stardates ratings. |
+| `trk_catalog.js` / `trk_boosters.js` | Complete Star Trek Play Booster inventory and weighted slot rules. |
+| `build_trk_catalog.py` | Rebuilds the pinned inventory from explicit Scryfall collector-number ranges. |
+| `test_trk_boosters.js` | Inventory, statistics joins, 100,000-pack simulation and UI dispatch checks. |
 | `index.html` | The draft simulator and all five practice views. |
 | `fra_boosters.js` / `fra_catalog.js` | FRA slot rules and complete booster inventory, including 43 explicit echoed pairs. Independent of win-rate coverage. |
 | `test_fra_boosters.js` | Booster composition, pair, probability and browser integration checks. Run with `node --test test_fra_boosters.js`. |
@@ -47,7 +51,7 @@ of the pack you get a grade and a per-card breakdown.
 
 `fetch_cards.py` options:
 
-- `--set msh|hob|fra` — which set to fetch (default `msh`).
+- `--set msh|hob|fra|trk` — which set to fetch (default `msh`).
 - `--source auto|untapped|draftsim` — data source (default `auto`: untapped
   first, draftsim fallback if untapped has no stats for the set yet).
 - `--min-games N` — minimum total games played for a card to be ranked (default `500`,
@@ -70,7 +74,7 @@ the raw 0–5 draftsim rating is also shown on reveal.
 
 ## Booster model
 
-A 14-card Play Booster: **1** rare-or-mythic (mythic ≈ 13.5% of the time),
+The original MSH model uses a 14-card Play Booster: **1** rare-or-mythic (mythic ≈ 13.5% of the time),
 **3** uncommons, **9** commons, and **1** land slot that is a basic land ≈ 50% of
 the time (otherwise a common dual land). In MSH, a **Marvel Universe** special
 card replaces a common in ≈ 8% of packs. Basic lands and the special cards have
@@ -181,7 +185,62 @@ base printings and Special Guests 159–168, checked on 2026-10-01. Stats are
 joined by set and front-face name when a set loads. Missing stats leave the
 card available but unscored, so daily imports cannot remove a partner or skew
 the booster pool. Root Maze, currently absent from Untapped's statistics, is
-included this way. All other sets retain their existing booster logic.
+included this way. MSH and HOB retain their existing booster logic.
+
+## Star Trek booster rules
+
+[Open Star Trek](https://maikch2.github.io/msh-draft-trainer/#trk/study) or
+[use voice and shared practice](https://draft-rating-api.andres336403.chatgpt.site/practice/#trk/drill).
+The [approved design](https://github.com/fintual-experimental/design-docs/blob/main/draft-bot/star-trek.md)
+covers the import, boosters, API and daily refresh.
+
+Every pack contains seven commons, three uncommons, a nonfoil wildcard, a
+rare/mythic, a foil wildcard and a land. A Stardates card replaces one common
+in 1/25 packs. The land slot is 50% common dual and 50% basic; shock lands appear
+among rares and wildcards. Foils can duplicate nonfoils. Cards are shuffled.
+
+The catalogue includes 341 gameplay identities: 306 main-set cards, five basics
+and all 30 Stardates. Missing win rates never shrink these pools. All imported
+cards retain the 500-game threshold and percentile scores. Typed and voice drills
+retain their existing rarity and mistake weights; those are separate from pack odds.
+`count=all` on the public API returns the imported dataset, including unrated cards,
+not the separate complete booster catalogue.
+
+The model follows [Wizards' Play Booster contents](https://magic.wizards.com/en/news/feature/collecting-star-trek).
+Each slot selects a treatment/rarity bucket, then a printing uniformly within that
+bucket. `trk_boosters.js` records its source and whether the weight is estimated.
+Exact printed percentages are retained; the remaining mass is shared equally
+among that slot's “less than 1%” buckets: 2.3/11 percentage points for the nonfoil
+wildcard, 0.8/5 for the rare slot, and 3.1/11 for the foil wildcard. The rounded
+basic-land categories are normalized within the basic half of the land slot.
+The common and uncommon treatment percentages are interpreted per card slot.
+
+Ordinary nonfoils cannot repeat a gameplay identity. Already drawn cards are
+removed before each draw; an exhausted treatment bucket is excluded and the
+remaining bucket weights are renormalized. This slightly reduces repeat opportunities
+for the sole Klingon common. Published weights describe draws before this duplicate
+constraint. There is no claim of exact print-sheet order, color balance or box
+correlations. Images show representative cards rather than collectible finishes.
+
+`build_trk_catalog.py` pins main printings 1–306, basics 307–326, borderless lands
+332–337, scenes 338–362, LCARS 363–391, LCARS shocks 392–401, classic Enterprise
+402–425, Klingon frames 426–435 and SDS 1–30. Welcome/Commander-only cards,
+Klingon script, surge foil, extended art, headliners and bundle-only treatments
+are excluded. SDS cards never appear in the foil wildcard. Scryfall's current
+`booster` flag is not used because it excludes these prerelease printings.
+Rebuild with `python3 build_trk_catalog.py`; the script checks every pool's count
+before replacing the catalogue. Statistics join by set and normalized front name,
+including Stardates alternate names; ambiguous matches fail.
+
+Run `python3 refresh_cards.py --set trk --publish` to update and publish ratings.
+A separate Codex job runs this at 07:00 America/Santiago, alongside the existing
+FRA and HOB schedules. It uses the existing personal Git credential helper,
+preserves current files on missing data (exit 2), and verifies the published data
+and script hash. The computer and Codex app must be running. Daily changes load
+in the voice site automatically without redeployment.
+
+Run `node --test test_trk_boosters.js test_fra_boosters.js test_drill_api.mjs test_practice.mjs`
+and `python3 -m unittest -v test_fetch_cards.py` for regression checks.
 
 ## Public voice drill API
 
@@ -252,7 +311,7 @@ The response reports `sampling.mode: "all"` and `next_previous_card_id: null`.
 This includes imported cards, not a separate inventory of every printed card.
 
 Use `count=50` or `count=100` for fresh random drill batches.
-Supported sets: `fra` (default), `hob`, `msh`. No authentication is required. CORS permits external clients.
+Supported sets: `fra` (default), `trk`, `hob`, `msh`. No authentication is required. CORS permits external clients.
 Responses use `Cache-Control: no-store`; chat tools that reuse URL results can
 append a different `nonce` parameter to request another batch.
 

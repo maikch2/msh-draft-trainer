@@ -13,7 +13,7 @@
   if (!hosted) {
     $("voice-start").onclick = () => {
       const history = {};
-      for (const set of ["FRA","HOB","MSH"]) history[set] = core.cleanHistory(read("drill_err_"+set,{}));
+      for (const set of ["FRA","HOB","MSH","TRK"]) history[set] = core.cleanHistory(read("drill_err_"+set,{}));
       const payload = encodeURIComponent(JSON.stringify({device, history}));
       location.assign(site + "/practice/#" + trainer.set.toLowerCase() + "/drill?history=" + payload);
     };
@@ -69,7 +69,7 @@
       if(set===trainer.set) status((error.message || "Connection unavailable") + " Answers are kept on this device and will retry.");
     } finally {
       s.busy=false;
-      if(!voice) $("voice-start").disabled=!signedIn;
+      if(!voice) $("voice-start").disabled=!signedIn || trainer.cards.length<2;
       if(s.queue.length && signedIn) setTimeout(()=>sync(set),2000);
     }
   }
@@ -78,7 +78,7 @@
   if(window.DRILL_TRANSFER && window.DRILL_TRANSFER.length < 150000) {
     try {
       const transfer=JSON.parse(window.DRILL_TRANSFER);
-      if(/^[a-f0-9-]{36}$/.test(transfer.device)) for(const set of ["FRA","HOB","MSH"]) {
+      if(/^[a-f0-9-]{36}$/.test(transfer.device)) for(const set of ["FRA","HOB","MSH","TRK"]) {
         const id="import:"+transfer.device+":"+set;
         const s=state(set);
         if(!s.queue.some(e=>e.id===id)) s.queue.push({id,set,kind:"import",history:core.cleanHistory(transfer.history?.[set])});
@@ -101,7 +101,7 @@
   document.addEventListener("visibilitychange",()=>{if(!document.hidden) {void sync(trainer.set); if(voice) void wake(voice);}});
   setInterval(()=>{if(!document.hidden) for(const set of states.keys()) void sync(set);},30000);
   apply(trainer.set);
-  for(const set of [trainer.set,...["FRA","HOB","MSH"].filter(s=>s!==trainer.set)]) void sync(set);
+  for(const set of [trainer.set,...["FRA","HOB","MSH","TRK"].filter(s=>s!==trainer.set)]) void sync(set);
 
   const send=(v,event)=>{if(voice===v && v.dc?.readyState==="open") v.dc.send(JSON.stringify(event));};
   const info=text=>{$("voice-state").textContent=text;};

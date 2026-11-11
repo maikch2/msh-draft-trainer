@@ -24,7 +24,7 @@
   <section>
     <div class="controls">
       <label for="set">Set</label>
-      <select id="set"><option value="fra">Reality Fracture</option><option value="hob">The Hobbit</option><option value="msh">Marvel Super Heroes</option></select>
+      <select id="set"><option value="trk">Star Trek</option><option value="fra">Reality Fracture</option><option value="hob">The Hobbit</option><option value="msh">Marvel Super Heroes</option></select>
       <button class="primary" data-count="all">Get all cards</button>
       <button data-count="50">Generate 50 cards</button>
       <button data-count="100">Generate 100 cards</button>
@@ -39,7 +39,7 @@
   </section>
   <h2>Call it directly</h2>
   <p><code id="endpoint"></code></p>
-  <p>No API key is needed. Use <code>set=fra</code>, <code>hob</code> or <code>msh</code> and <code>count=all</code> (default), <code>50</code> or <code>100</code>. Add a new <code>nonce</code> value if your chat tool reuses a previous response.</p>
+  <p>No API key is needed. Use <code>set=trk</code>, <code>fra</code>, <code>hob</code> or <code>msh</code> and <code>count=all</code> (default), <code>50</code> or <code>100</code>. Add a new <code>nonce</code> value if your chat tool reuses a previous response.</p>
   <p>All cards returns each card from the published dataset once, in source order, including unrated cards with <code>rating: null</code>. Skip those when grading. Random batches use the same rarity weights as Drill with reset memory and include only rated cards. Cards may repeat later in the batch, but never twice in a row. Your browser's mistake history is not included; API clients can supply history with POST.</p>
   <small>This page is hosted on maikch2's GitHub Pages site. The API runs on Sites and reads the latest published card data. <a href="https://github.com/maikch2/msh-draft-trainer#public-voice-drill-api">API documentation</a></small>
 </main>

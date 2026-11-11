@@ -76,7 +76,7 @@ test('POST history matches shared sampler and respects previous card', async () 
 });
 
 test('default and count=all return every source card once, including unrated cards', async () => {
-  for (const [set,path] of Object.entries({fra:'cards_fra.json',hob:'cards_hob.json',msh:'cards.json'})) {
+  for (const [set,path] of Object.entries({trk:'cards_trk.json',fra:'cards_fra.json',hob:'cards_hob.json',msh:'cards.json'})) {
     const db=JSON.parse(fs.readFileSync(path));
     const handle=createHandler({sampling,fetchData:async()=>Response.json(db),random:()=>{throw new Error('must not sample');}});
     for (const req of [request(`?set=${set}`),request(`?set=${set}&count=all`),post({set,count:'all',history:{[db.cards[0].id]:[4,1]},previous_card_id:db.cards[0].id})]) {
@@ -104,7 +104,7 @@ test('complete catalogue remains available when no cards have ratings', async ()
 });
 
 test('all sets read their existing source; unrated cards never enter batches', async () => {
-  const paths={fra:'cards_fra.json',hob:'cards_hob.json',msh:'cards.json'};
+  const paths={trk:'cards_trk.json',fra:'cards_fra.json',hob:'cards_hob.json',msh:'cards.json'};
   const handle=createHandler({sampling,fetchData:async url=>Response.json(JSON.parse(fs.readFileSync(new URL(url).pathname.split('/').at(-1))))});
   for(const [set,path] of Object.entries(paths)) {
     const data=await (await handle(request(`?set=${set}&count=50`))).json();
@@ -148,4 +148,18 @@ test('browser Drill uses the same sampler', () => {
   vm.runInContext(inline.replace(/init\(\);\s*$/,''),context);
   assert(vm.runInContext('nextDrillCard.toString().includes("DRILL_SAMPLING.next(RATED, drillCard, drillErr)")',context));
   assert.equal(vm.runInContext('cardWeight({set:"FRA",rarity:"common"})',context),9);
+});
+
+test('TRK random requests match browser weighting for 50/100 and personalized POST',async()=>{
+  const db=JSON.parse(fs.readFileSync('cards_trk.json','utf8'));
+  for(const count of [50,100]) {
+    const id=db.cards.find(c=>c.score!=null).id, history={[id]:[3,2]};
+    for(const personalized of [false,true]) {
+      const handle=createHandler({sampling,random:rng(),fetchData:async()=>Response.json(db)});
+      const response=await handle(personalized?post({set:'trk',count,history,previous_card_id:id}):request(`?set=trk&count=${count}`));
+      assert.equal(response.status,200);
+      const body=await response.json();
+      assert.deepEqual(body.cards.map(c=>c.id),sampling.batch(db.cards,count,personalized?history:{},personalized?id:null,rng()).map(c=>c.id));
+    }
+  }
 });

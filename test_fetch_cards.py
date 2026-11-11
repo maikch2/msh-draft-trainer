@@ -19,6 +19,33 @@ def page(stats=None, rows=None):
 
 
 class FetchTests(unittest.TestCase):
+    def test_trk_auto_never_falls_back_and_preserves_files_when_waiting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "cards_trk.json"
+            output.write_text("prior data")
+            with patch.object(fetcher, "fetch", return_value=page()), patch.object(
+                fetcher, "fetch_draftsim_tsv", side_effect=AssertionError("no fallback")
+            ), patch("sys.argv", ["fetch_cards.py", "--set", "trk", "--out", str(output)]):
+                self.assertEqual(fetcher.main(), 2)
+            self.assertEqual(output.read_text(), "prior data")
+            self.assertFalse(output.with_suffix(".js").exists())
+
+    def test_normalized_front_names_and_stardates_flavor_aliases_have_images(self):
+        source = {"data": [
+            {"name": "All Good Things...", "type_line": "Sorcery", "image_uris": {"normal": "image1"}},
+            {"name": "Mikaeus, the Lunarch", "flavor_name": "Benny Russell, Dreamer",
+             "type_line": "Creature", "image_uris": {"normal": "image2"}},
+        ]}
+        cards = [{"set": "SDS", "name": name} for name in ["All Good Things . . .", "Benny Russell, Dreamer"]]
+        with patch.object(fetcher, "fetch", return_value=json.dumps(source)):
+            fetcher.attach_images(cards)
+        self.assertEqual([c["image"] for c in cards], ["image1", "image2"])
+
+    def test_threshold_boundary_and_percentile_ties(self):
+        cards = [{"total_games": n, "win_rate": wr} for n, wr in [(499,.8),(500,.4),(500,.5),(600,.5),(1000,.6)]]
+        self.assertEqual(fetcher.score_cards(cards,"win_rate",500)[2],4)
+        self.assertEqual([c["score"] for c in cards],[None,1,3,3,5])
+
     def test_hybrid_pips_contribute_all_their_colors(self):
         self.assertEqual(fetcher.parse_cost("o1o(G/W)"), {"text": "{1}{(G/W)}", "colors": ["G", "W"]})
         self.assertEqual(fetcher.parse_cost("oUo(W/B)o(2/R)o(G/P)")["colors"], ["B", "G", "R", "U", "W"])

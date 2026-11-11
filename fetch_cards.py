@@ -43,6 +43,7 @@ import json
 import pathlib
 import re
 import sys
+import unicodedata
 import urllib.request
 import urllib.error
 
@@ -51,6 +52,10 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (draft-
 # Per-set configuration. `extra_scry_sets` are bonus-sheet sets whose cards can
 # appear in this set's boosters (e.g. MSH's Marvel Universe "MAR" cards).
 SETS = {
+    "trk": {
+        "code": "TRK", "name": "Star Trek", "untapped_slug": "star-trek",
+        "out": "cards_trk.json", "untapped_only": True,
+    },
     "msh": {
         "code": "MSH",
         "name": "Marvel Super Heroes",
@@ -439,10 +444,18 @@ def fetch_scryfall_set(set_code):
                 "rarity": c.get("rarity"),
                 "produced_mana": c.get("produced_mana", []),
             }
+            if c.get("flavor_name"):
+                out[c["flavor_name"]] = entry
             out[c["name"]] = entry
             out[c["name"].split(" // ")[0]] = entry   # also index front-face name
         url = page.get("next_page") if page.get("has_more") else None
     return out
+
+
+def normalize_card_name(name):
+    name = unicodedata.normalize("NFKC", name.split(" // ")[0])
+    name = name.replace("’", "'").replace("‘", "'")
+    return re.sub(r"\s*\.\s*\.\s*\.", "...", name).strip().casefold()
 
 
 def attach_images(cards):
@@ -459,6 +472,12 @@ def attach_images(cards):
                 print(f"  Scryfall {sc.upper()} lookup failed ({e}); skipping images")
                 cache[sc] = {}
         info = cache[sc].get(c["name"]) or cache[sc].get(c["name"].split(",")[0])
+        if not info:
+            matches = {id(entry): entry for name, entry in cache[sc].items()
+                       if normalize_card_name(name) == normalize_card_name(c["name"])}
+            if len(matches) > 1:
+                raise ValueError(f"Ambiguous Scryfall name: {c['name']}")
+            info = next(iter(matches.values()), None)
         c["image"] = info.get("image") if info else None
         c["image_small"] = info.get("image_small") if info else None
         c["is_land"] = bool(info and info.get("is_land")) or c.get("is_land", False)
@@ -515,6 +534,11 @@ def main():
 
     cfg = SETS[args.set]
     out = args.out or cfg["out"]
+    if cfg.get("untapped_only"):
+        if args.source == "draftsim":
+            ap.error("Star Trek uses Untapped ratings only")
+        args.source = "untapped"
+        args.wait_for_data = True
 
     cards = None
     source = None

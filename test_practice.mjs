@@ -74,7 +74,7 @@ test('spot on uses the displayed one-decimal score and preserves the original er
   assert.equal(core.grade({score:3.251},3.251).spotOn,false,'Extra precision does not match the requested one-decimal answer');
 });
 test('published hybrid cards have colors and speak hybrid mana alternatives',()=>{
-  for(const file of ['cards.json','cards_hob.json','cards_fra.json']) {
+  for(const file of ['cards.json','cards_hob.json','cards_fra.json','cards_trk.json']) {
     for(const card of JSON.parse(readFileSync(file,'utf8')).cards.filter(c=>c.cost.includes('/'))) {
       const expected=[...new Set(card.cost.match(/[WUBRG]/g) || [])].sort();
       assert.deepEqual(card.colors,expected,card.name);
@@ -82,5 +82,12 @@ test('published hybrid cards have colors and speak hybrid mana alternatives',()=
       assert.notEqual(q.colors,'colorless',card.name);
       assert.match(q.spoken_prompt,/ or /,card.name);
     }
+  }
+});
+
+test('TRK answer, import and reset events are valid; unknown sets remain invalid',()=>{
+  for(const e of [{...answer('trk'),set:'TRK'},{id:'import:TRK',set:'TRK',kind:'import',history:{123:[1,2]}},{id:'reset:TRK',set:'TRK',kind:'reset'}]) {
+    assert.equal(core.validEvent(e),true);
+    assert.equal(core.validEvent({...e,set:'UNKNOWN'}),false);
   }
 });

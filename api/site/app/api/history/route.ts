@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const auth = await authorize(request);
   if (auth.error) return auth.error;
   const set = new URL(request.url).searchParams.get("set")?.toUpperCase() || "FRA";
-  if (!["FRA","HOB","MSH"].includes(set)) return json({error:"Unknown set"}, 400);
+  if (!["FRA","HOB","MSH","TRK"].includes(set)) return json({error:"Unknown set"}, 400);
   return snapshot(auth.user!.userId, set);
 }
 async function snapshot(user: string, set: string) {

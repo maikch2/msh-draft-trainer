@@ -1,5 +1,5 @@
 const BASE = 'https://maikch2.github.io/msh-draft-trainer/';
-const SET_FILES = {fra:'cards_fra.json', hob:'cards_hob.json', msh:'cards.json'};
+const SET_FILES = {trk:'cards_trk.json', fra:'cards_fra.json', hob:'cards_hob.json', msh:'cards.json'};
 const COLORS = {W:'white', U:'blue', B:'black', R:'red', G:'green'};
 const HEADERS = {
   'Content-Type':'application/json; charset=utf-8',
@@ -63,7 +63,7 @@ export function createHandler({sampling, fetchData = fetch, random = Math.random
     if (Object.keys(input).some(k => !['set','count','history','previous_card_id','nonce'].includes(k)))
       return json({error:'Unknown parameter. Use set, count, history, previous_card_id or nonce.'},400);
     const set = typeof input.set === 'string' ? input.set.toLowerCase() : input.set ?? 'fra';
-    if (!Object.hasOwn(SET_FILES,set)) return json({error:'set must be fra, hob or msh.'},400);
+    if (!Object.hasOwn(SET_FILES,set)) return json({error:'set must be trk, fra, hob or msh.'},400);
     const count = input.count ?? 'all';
     if (![50,100,'50','100','all'].includes(count)) return json({error:'count must be all, 50 or 100.'},400);
     const history = input.history ?? {};
