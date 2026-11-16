@@ -112,6 +112,17 @@
     .srow .thumb,.srow .th{width:208px}
   }
 
+  .studyzoom{display:none}
+  @media (min-width:900px) and (hover:hover) and (pointer:fine){
+    .srow .thumb{cursor:zoom-in}
+    .srow .thumb:focus-visible{outline:2px solid var(--accent2);outline-offset:4px;border-radius:7px}
+    .srow .thumb:hover .studyzoom,.srow .thumb:focus-visible .studyzoom{
+      display:block;position:fixed;z-index:100;right:24px;top:50%;transform:translateY(-50%);
+      width:min(420px,45vw);height:auto;max-height:calc(100dvh - 32px);object-fit:contain;
+      border-radius:14px;filter:drop-shadow(0 8px 24px rgba(0,0,0,.8));pointer-events:none;
+    }
+  }
+
   /* signals (wheels / traps) */
   .sigintro{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 20px;
             background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
@@ -555,8 +566,8 @@ function renderStudy(){
       const th=c.image||c.image_small;
       return `<div class="srow">
         <div class="rk">${sc == null ? "—" : i+1}</div>
-        <div class="thumb">
-          ${th?`<img class="th" src="${th}" alt="" loading="lazy">`:`<div class="th"></div>`}
+        <div class="thumb"${th?' tabindex="0" role="group" aria-label="Card image preview"':''}>
+          ${th?`<img class="th" src="${th}" alt="" loading="lazy"><img class="studyzoom" src="${th}" alt="" aria-hidden="true" loading="lazy">`:`<div class="th"></div>`}
           <span class="scorebadge" style="color:${hue}">${sc == null ? "—" : f1(sc)}</span>
         </div>
         <div><div class="snm">${c.name}</div>
