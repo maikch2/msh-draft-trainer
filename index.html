@@ -95,7 +95,7 @@
   .fbtn.active{color:var(--ink);border-color:var(--accent2)}
   .cdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;
         vertical-align:middle;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
-  .srow{display:grid;grid-template-columns:34px 104px 1fr;gap:14px;align-items:center;
+  .srow{display:grid;grid-template-columns:34px 104px minmax(0,1fr);gap:14px;align-items:center;
         padding:9px 10px;border-bottom:1px solid var(--line)}
   .srow .rk{color:var(--muted);font-size:12px;text-align:right}
   .srow .thumb{position:relative;width:104px}
@@ -107,6 +107,10 @@
   .srow .snm{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .srow .smeta{font-size:11px;color:var(--muted)}
   .scount{color:var(--muted);font-size:12.5px;margin:0 0 10px}
+  @media (min-width:900px){
+    .srow{grid-template-columns:34px 208px minmax(0,1fr)}
+    .srow .thumb,.srow .th{width:208px}
+  }
 
   /* signals (wheels / traps) */
   .sigintro{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 20px;
