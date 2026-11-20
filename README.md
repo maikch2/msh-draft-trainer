@@ -191,8 +191,6 @@ included this way. MSH and HOB retain their existing booster logic.
 
 [Open Star Trek](https://maikch2.github.io/msh-draft-trainer/#trk/study) or
 [use voice and shared practice](https://draft-rating-api.andres336403.chatgpt.site/practice/#trk/drill).
-The [approved design](https://github.com/fintual-experimental/design-docs/blob/main/draft-bot/star-trek.md)
-covers the import, boosters, API and daily refresh.
 
 Every pack contains seven commons, three uncommons, a nonfoil wildcard, a
 rare/mythic, a foil wildcard and a land. A Stardates card replaces one common
